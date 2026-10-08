@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verifications · RepairHub admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-5xl" hidden>
+    <h1 class="text-2xl font-bold text-ink sm:text-3xl">Verifications</h1>
+    <p class="mt-1 text-slate-500">Review documents and approve providers before they can send quotations.</p>
+    <nav id="tabs" class="mt-6 flex gap-6 border-b border-slate-200 text-sm" role="tablist"></nav>
+    <div id="list" class="mt-5 space-y-4"></div>
+    <div id="pager"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'verifications', roles: ['admin'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+
+      const TABS = {
+        technician: { label: 'Technicians', list: RH.api.admin.pendingTechnicians, verify: RH.api.admin.verifyTechnician },
+        center: { label: 'Service centers', list: RH.api.admin.pendingCenters, verify: RH.api.admin.verifyCenter },
+      };
+      let tab = TABS[RH.param('tab')] ? RH.param('tab') : 'technician';
+      let page = 1;
+      let items = [];
+
+      const isImage = (url) => /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
+
+      function docs(urls) {
+        if (!urls || !urls.length) {
+          return html`<p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-800"><i class="fa-solid fa-triangle-exclamation mr-1"></i>No documents uploaded yet. The provider must upload documents before they can be approved.</p>`;
+        }
+        return html`<div class="flex flex-wrap gap-3">${urls.map((u, i) => isImage(u)
+          ? html`<a href="${u}" target="_blank" rel="noopener" class="block"><img src="${u}" alt="Document ${i + 1}" class="h-24 w-24 rounded-xl border border-slate-200 object-cover" /></a>`
+          : html`<a href="${u}" target="_blank" rel="noopener" class="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 text-xs text-brand-600 hover:bg-brand-50"><i class="fa-regular fa-file-pdf text-2xl"></i>Document ${i + 1}</a>`)}</div>`;
+      }
+
+      function card(p) {
+        const u = p.userId || {};
+        const name = tab === 'center' ? p.businessName : u.fullName;
+        const facts = tab === 'center'
+          ? [['Owner', u.fullName], ['Address', p.address], ['Coverage', p.coverageRadiusKm && `${p.coverageRadiusKm} km`]]
+          : [['Experience', p.experienceYears !== undefined && `${p.experienceYears} years`], ['Service areas', (p.serviceAreas || []).join(', ')], ['Bio', p.bio]];
+        return html`<article class="card p-5">
+          <div class="flex flex-wrap items-start gap-4">
+            ${RH.ui.avatar(name, 'w-12 h-12 text-base')}
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold text-ink">${name || 'Unnamed'}</p>
+              <p class="text-sm text-slate-500">${[u.email, u.phone].filter(Boolean).join(' · ')}</p>
+              <p class="text-xs text-slate-400">Signed up ${RH.ui.dateTime(p.createdAt)}</p>
+            </div>
+            ${RH.ui.toneBadge('Pending', 'amber')}
+          </div>
+          <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+            ${facts.map(([k, v]) => html`<div><dt class="text-xs text-slate-500">${k}</dt><dd class="font-medium text-ink">${v || '—'}</dd></div>`)}
+          </dl>
+          <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Verification documents</p>
+          <div class="mt-2">${docs(p.verificationDocs)}</div>
+          <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button data-reject="${p._id}" class="btn-danger btn-sm">Reject</button>
+            <button data-approve="${p._id}" class="btn-primary btn-sm" ${p.verificationDocs && p.verificationDocs.length ? '' : RH.ui.raw('disabled title="No documents uploaded"')}><i class="fa-solid fa-check"></i>Approve</button>
+          </div>
+        </article>`;
+      }
+
+      function renderTabs(counts) {
+        setHTML('tabs', Object.entries(TABS).map(([key, t]) => html`<button role="tab" data-tab="${key}" aria-selected="${key === tab}" class="-mb-px border-b-2 pb-3 ${key === tab ? 'border-brand-600 font-semibold text-brand-600' : 'border-transparent text-slate-500 hover:text-ink'}">${t.label}${counts && counts[key] !== undefined ? ` (${counts[key]})` : ''}</button>`));
+        document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
+          tab = b.dataset.tab;
+          page = 1;
+          history.replaceState(null, '', RH.url('admin/verifications.html', { tab }));
+          load();
+        }));
+      }
+
+      async function decide(id, decision, btn) {
+        let feedback;
+        if (decision === 'reject') {
+          feedback = await askFeedback();
+          if (feedback === null) return;
+        }
+        await RH.ui.withLoading(btn, async () => {
+          try {
+            await TABS[tab].verify(id, decision, feedback);
+            RH.ui.toast(decision === 'approve' ? 'Approved. The provider has been notified.' : 'Rejected. The provider has been notified.', 'success');
+            load();
+          } catch (e) {
+            RH.ui.toast(e.message, 'error');
+          }
+        });
+      }
+
+      function askFeedback() {
+        return new Promise((resolve) => {
+          const m = RH.ui.modal('Reject verification', html`<form class="space-y-4">
+            <div><label for="feedback" class="label">Reason shown to the provider</label>
+              <textarea id="feedback" rows="3" maxlength="500" class="input resize-none" placeholder="e.g. ID document is blurry, please upload a clearer copy."></textarea></div>
+            <div class="flex justify-end gap-3"><button type="button" data-close class="btn-ghost btn-sm">Cancel</button><button type="submit" class="btn-danger btn-sm">Reject</button></div>
+          </form>`);
+          let done = false;
+          m.el.querySelector('form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            done = true;
+            const v = m.el.querySelector('#feedback').value.trim();
+            m.close();
+            resolve(v);
+          });
+          new MutationObserver((_, obs) => { if (!document.body.contains(m.el)) { obs.disconnect(); if (!done) resolve(null); } }).observe(document.body, { childList: true });
+        });
+      }
+
+      async function load() {
+        renderTabs();
+        setHTML('list', RH.ui.spinner());
+        setHTML('pager', '');
+        try {
+          const [res, other] = await Promise.all([
+            TABS[tab].list({ page, limit: 10 }),
+            TABS[tab === 'technician' ? 'center' : 'technician'].list({ limit: 1 }),
+          ]);
+          items = res.data;
+          renderTabs({ [tab]: res.meta.total, [tab === 'technician' ? 'center' : 'technician']: other.meta.total });
+          if (!items.length) {
+            setHTML('list', RH.ui.emptyState('fa-circle-check', 'All caught up', `No ${TABS[tab].label.toLowerCase()} are waiting for verification.`));
+            return;
+          }
+          setHTML('list', items.map(card));
+          setHTML('pager', RH.ui.pager(res.meta));
+          document.querySelectorAll('[data-approve]').forEach((b) => b.addEventListener('click', () => decide(b.dataset.approve, 'approve', b)));
+          document.querySelectorAll('[data-reject]').forEach((b) => b.addEventListener('click', () => decide(b.dataset.reject, 'reject', b)));
+          document.querySelectorAll('#pager [data-page]').forEach((b) => b.addEventListener('click', () => { page = Number(b.dataset.page); load(); }));
+        } catch (e) {
+          setHTML('list', RH.ui.errorState(e.message, true));
+        }
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Users · RepairHub admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-6xl" hidden>
+    <h1 class="text-2xl font-bold text-ink sm:text-3xl">Users</h1>
+    <p class="mt-1 text-slate-500">Find accounts and suspend or reactivate them.</p>
+
+    <div class="mt-6 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+      <div class="relative">
+        <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400"></i>
+        <input id="q" type="search" maxlength="100" placeholder="Search by name or email…" class="input pl-9" />
+      </div>
+      <select id="role" class="input sm:w-44">
+        <option value="">All roles</option>
+        <option value="customer">Customers</option>
+        <option value="technician">Technicians</option>
+        <option value="service_center">Service centers</option>
+        <option value="admin">Admins</option>
+      </select>
+      <select id="status" class="input sm:w-40">
+        <option value="">Any status</option>
+        <option value="active">Active</option>
+        <option value="suspended">Suspended</option>
+      </select>
+    </div>
+
+    <div id="list" class="mt-5"></div>
+    <div id="pager"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'users', roles: ['admin'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      let page = 1;
+      let items = [];
+      const ROLE = { customer: 'Customer', technician: 'Technician', service_center: 'Service center', admin: 'Admin' };
+
+      function row(u) {
+        const suspended = u.status === 'suspended';
+        return html`<tr class="border-t border-slate-100">
+          <td class="py-3 pr-3"><div class="flex items-center gap-3">${RH.ui.avatar(u.fullName, 'w-9 h-9 text-xs')}
+            <div class="min-w-0"><p class="truncate font-medium text-ink">${u.fullName}</p><p class="truncate text-xs text-slate-500">${u.email}</p></div></div></td>
+          <td class="hidden py-3 pr-3 text-slate-600 md:table-cell">${u.phone || '—'}</td>
+          <td class="py-3 pr-3">${RH.ui.toneBadge(ROLE[u.role] || u.role, u.role === 'admin' ? 'blue' : 'slate')}</td>
+          <td class="py-3 pr-3">${RH.ui.toneBadge(suspended ? 'Suspended' : 'Active', suspended ? 'red' : 'green')}</td>
+          <td class="hidden py-3 pr-3 text-slate-500 lg:table-cell">${RH.ui.date(u.createdAt)}<span class="block text-xs">${u.lastLoginAt ? `Last login ${RH.ui.timeAgo(u.lastLoginAt)}` : 'Never logged in'}</span></td>
+          <td class="py-3 text-right">${u.role === 'admin'
+            ? ''
+            : html`<button data-toggle="${u._id}" class="${suspended ? 'btn-outline' : 'btn-danger'} btn-sm">${suspended ? 'Reactivate' : 'Suspend'}</button>`}</td>
+        </tr>`;
+      }
+
+      async function toggle(btn) {
+        const u = items.find((x) => x._id === btn.dataset.toggle);
+        const next = u.status === 'suspended' ? 'active' : 'suspended';
+        const yes = await RH.ui.confirm(next === 'suspended' ? `Suspend ${u.fullName}?` : `Reactivate ${u.fullName}?`,
+          next === 'suspended' ? 'They will be logged out and unable to use RepairHub until reactivated.' : 'They will be able to log in again.',
+          { confirmText: next === 'suspended' ? 'Suspend' : 'Reactivate', danger: next === 'suspended' });
+        if (!yes) return;
+        await RH.ui.withLoading(btn, async () => {
+          try {
+            await RH.api.admin.setUserStatus(u._id, next);
+            RH.ui.toast(`${u.fullName} is now ${next}.`, 'success');
+            load();
+          } catch (e) {
+            RH.ui.toast(e.message, 'error');
+          }
+        });
+      }
+
+      async function load() {
+        setHTML('list', RH.ui.spinner());
+        setHTML('pager', '');
+        try {
+          const res = await RH.api.admin.users({
+            q: document.getElementById('q').value.trim(),
+            role: document.getElementById('role').value,
+            status: document.getElementById('status').value,
+            page,
+            limit: 20,
+          });
+          items = res.data;
+          if (!items.length) {
+            setHTML('list', RH.ui.emptyState('fa-users', 'No users found', 'Try a different search or filter.'));
+            return;
+          }
+          setHTML('list', html`<div class="card overflow-x-auto px-5"><table class="w-full text-left text-sm">
+            <thead class="text-xs uppercase tracking-wide text-slate-500"><tr>
+              <th class="py-3 pr-3 font-medium">User</th><th class="hidden py-3 pr-3 font-medium md:table-cell">Phone</th>
+              <th class="py-3 pr-3 font-medium">Role</th><th class="py-3 pr-3 font-medium">Status</th>
+              <th class="hidden py-3 pr-3 font-medium lg:table-cell">Joined</th><th class="py-3"></th></tr></thead>
+            <tbody>${items.map(row)}</tbody></table></div>`);
+          setHTML('pager', RH.ui.pager(res.meta));
+          document.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', () => toggle(b)));
+          document.querySelectorAll('#pager [data-page]').forEach((b) => b.addEventListener('click', () => { page = Number(b.dataset.page); load(); }));
+        } catch (e) {
+          setHTML('list', RH.ui.errorState(e.message, true));
+        }
+      }
+
+      let timer;
+      document.getElementById('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { page = 1; load(); }, 350); });
+      ['role', 'status'].forEach((id) => document.getElementById(id).addEventListener('change', () => { page = 1; load(); }));
+      load();
+    })();
+  </script>
+</body>
+</html>

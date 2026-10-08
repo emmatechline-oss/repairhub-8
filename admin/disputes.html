@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Disputes · RepairHub admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-5xl" hidden>
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-ink sm:text-3xl">Disputes</h1>
+        <p class="mt-1 text-slate-500">A dispute freezes the job's payment until you rule on it.</p>
+      </div>
+      <label class="flex items-center gap-2 text-sm text-slate-600">Show
+        <select id="status" class="input w-auto py-2">
+          <option value="open">Open</option>
+          <option value="resolved">Resolved</option>
+          <option value="">All</option>
+        </select>
+      </label>
+    </div>
+    <div id="list" class="mt-6 space-y-4"></div>
+    <div id="pager"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'disputes', roles: ['admin'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      let page = 1;
+      let items = [];
+
+      const DECISIONS = {
+        release: ['Release to technician', 'The technician is paid (minus commission). Cash jobs are marked settled.'],
+        refund: ['Full refund to customer', 'Escrowed money returns to the customer\'s wallet and the job is cancelled.'],
+        partial: ['Partial refund', 'Part goes back to the customer\'s wallet, the rest is released to the technician.'],
+      };
+
+      const userCache = new Map();
+      const userName = (id) => {
+        if (!id) return Promise.resolve(null);
+        if (!userCache.has(String(id))) userCache.set(String(id), RH.api.admin.user(id).then((r) => r.data).catch(() => null));
+        return userCache.get(String(id));
+      };
+
+      function card({ d, job, raisedBy }) {
+        const j = d.repairJobId || {};
+        const r = (job && job.repairRequestId) || {};
+        const res = d.resolution || {};
+        return html`<article class="card p-5">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex items-center gap-3">
+              ${RH.ui.deviceTile(r.itemType, 'w-12 h-12 text-xl')}
+              <div><p class="font-semibold text-ink">${r.itemType ? `${r.itemType} repair` : 'Repair job'}${r.brandModel ? ` · ${r.brandModel}` : ''}</p>
+                <p class="text-xs text-slate-500">Dispute ${RH.ui.ref(d._id, 'DP')} · opened ${RH.ui.dateTime(d.createdAt)}</p></div>
+            </div>
+            ${d.status === 'open' ? RH.ui.toneBadge('Open', 'red') : RH.ui.toneBadge('Resolved', 'green')}
+          </div>
+          <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+            <div><dt class="text-xs text-slate-500">Raised by</dt><dd class="font-medium text-ink">${raisedBy ? `${raisedBy.fullName} (${raisedBy.role})` : '—'}</dd></div>
+            <div><dt class="text-xs text-slate-500">Job price</dt><dd class="font-medium text-ink">${RH.ui.money(j.price)}</dd></div>
+            <div><dt class="text-xs text-slate-500">Payment</dt><dd class="font-medium text-ink">${RH.ui.statusLabel(j.payment && j.payment.status)}</dd></div>
+            <div><dt class="text-xs text-slate-500">Job status</dt><dd class="font-medium text-ink">${RH.ui.statusLabel(j.status)}</dd></div>
+          </dl>
+          <div class="mt-4 rounded-xl bg-slate-50 p-4 text-sm"><p class="text-xs text-slate-500">Reason</p><p class="mt-1 whitespace-pre-line text-ink">${d.reason}</p></div>
+          ${r.problemDescription ? html`<p class="mt-3 text-xs text-slate-500">Original problem: <span class="text-slate-700">${r.problemDescription}</span></p>` : ''}
+          ${d.evidenceUrls && d.evidenceUrls.length
+            ? html`<div class="mt-3 flex flex-wrap gap-2">${d.evidenceUrls.map((u, i) => html`<a href="${u}" target="_blank" rel="noopener" class="badge bg-brand-50 text-brand-700"><i class="fa-solid fa-paperclip"></i>Evidence ${i + 1}</a>`)}</div>`
+            : ''}
+          ${d.status === 'resolved'
+            ? html`<div class="mt-4 rounded-xl bg-green-50 p-4 text-sm text-green-800"><b>Decision:</b> ${res.decision ? (DECISIONS[res.decision] || [res.decision])[0] : '—'}${res.refundAmount ? ` (${RH.ui.money(res.refundAmount)} refunded)` : ''}${res.note ? html` · ${res.note}` : ''}
+                <span class="block text-xs text-green-700">${RH.ui.dateTime(res.resolvedAt)}</span></div>`
+            : html`<div class="mt-5 flex justify-end"><button data-resolve="${d._id}" class="btn-primary btn-sm"><i class="fa-solid fa-gavel"></i>Resolve dispute</button></div>`}
+        </article>`;
+      }
+
+      function resolve(row) {
+        const price = row.d.repairJobId && row.d.repairJobId.price;
+        const pay = row.d.repairJobId && row.d.repairJobId.payment && row.d.repairJobId.payment.status;
+        const m = RH.ui.modal('Resolve dispute', html`<form class="space-y-4" novalidate>
+          ${pay && pay !== 'held'
+            ? html`<p class="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Payment status is "${RH.ui.statusLabel(pay)}", not escrow. Only escrowed payments are moved by a refund; ${pay === 'cash' ? 'releasing marks the cash payment as settled.' : 'no money will move.'}</p>`
+            : ''}
+          <fieldset class="space-y-2">${Object.entries(DECISIONS).map(([k, [label, hint]], i) => html`<label class="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-3 hover:border-brand-200">
+            <input type="radio" name="decision" value="${k}" class="mt-1 text-brand-600" ${i === 0 ? RH.ui.raw('checked') : ''} />
+            <span><span class="block text-sm font-semibold text-ink">${label}</span><span class="block text-xs text-slate-500">${hint}</span></span></label>`)}</fieldset>
+          <div id="amount-wrap" hidden><label for="refundAmount" class="label">Refund amount (less than ${RH.ui.money(price)})</label>
+            <input id="refundAmount" name="refundAmount" type="number" min="1" max="${price ? price - 1 : ''}" class="input" /></div>
+          <div><label for="note" class="label">Note <span class="font-normal text-slate-400">(optional, shown in the record)</span></label>
+            <textarea id="note" name="note" rows="2" maxlength="1000" class="input resize-none"></textarea></div>
+          <div class="flex justify-end gap-3"><button type="button" data-close class="btn-ghost btn-sm">Cancel</button><button type="submit" class="btn-primary btn-sm">Confirm decision</button></div>
+        </form>`);
+        const form = m.el.querySelector('form');
+        form.querySelectorAll('[name=decision]').forEach((r) => r.addEventListener('change', () => { m.el.querySelector('#amount-wrap').hidden = form.decision.value !== 'partial'; }));
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          RH.ui.clearErrors(form);
+          const decision = form.decision.value;
+          const body = { decision };
+          if (decision === 'partial') {
+            const amt = Number(form.refundAmount.value);
+            if (!amt || amt < 1 || (price && amt >= price)) return RH.ui.fieldError(form, 'refundAmount', `Enter an amount between ₦1 and ${RH.ui.money(price - 1)}.`);
+            body.refundAmount = amt;
+          }
+          if (form.note.value.trim()) body.note = form.note.value.trim();
+          await RH.ui.withLoading(form.querySelector('[type=submit]'), async () => {
+            try {
+              await RH.api.admin.resolveDispute(row.d._id, body);
+              m.close();
+              RH.ui.toast('Dispute resolved. Both parties have been notified.', 'success');
+              load();
+            } catch (err) {
+              RH.ui.showFormError(form, err);
+            }
+          }, 'Saving…');
+        });
+      }
+
+      async function load() {
+        setHTML('list', RH.ui.spinner());
+        setHTML('pager', '');
+        try {
+          const status = document.getElementById('status').value;
+          const res = await RH.api.admin.disputes({ status, page, limit: 10 });
+          items = await Promise.all(res.data.map(async (d) => ({
+            d,
+            job: await RH.api.jobs.get(d.repairJobId && d.repairJobId._id).then((r) => r.data).catch(() => null),
+            raisedBy: await userName(d.raisedBy),
+          })));
+          if (!items.length) {
+            setHTML('list', RH.ui.emptyState('fa-scale-balanced', 'No disputes', status === 'open' ? 'There are no open disputes right now.' : 'Nothing to show.'));
+            return;
+          }
+          setHTML('list', items.map(card));
+          setHTML('pager', RH.ui.pager(res.meta));
+          document.querySelectorAll('[data-resolve]').forEach((b) => b.addEventListener('click', () => resolve(items.find((x) => x.d._id === b.dataset.resolve))));
+          document.querySelectorAll('#pager [data-page]').forEach((b) => b.addEventListener('click', () => { page = Number(b.dataset.page); load(); }));
+        } catch (e) {
+          setHTML('list', RH.ui.errorState(e.message, true));
+        }
+      }
+
+      document.getElementById('status').addEventListener('change', () => { page = 1; load(); });
+      load();
+    })();
+  </script>
+</body>
+</html>
