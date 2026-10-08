@@ -1,0 +1,95 @@
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  background-color: #f8fafc;
+  color: #0f1b3d;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Long unbroken text people type (error codes, URLs) wraps inside its card instead of spilling out. */
+p,
+dd,
+li {
+  overflow-wrap: break-word;
+}
+
+/* Let grid columns shrink to the screen; otherwise one long word stretches the column past the viewport. */
+.grid > * {
+  min-width: 0;
+}
+
+/* Hide content until layout.js has mounted the shell, to avoid a flash of unstyled page. */
+[hidden] {
+  display: none !important;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* Micro-interactions (animations themselves live in assets/js/motion-fx.js). */
+.btn,
+.btn-primary,
+.btn-outline,
+.btn-ghost,
+.btn-danger {
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+.btn:active:not(:disabled),
+.btn-primary:active:not(:disabled),
+.btn-outline:active:not(:disabled),
+.btn-ghost:active:not(:disabled),
+.btn-danger:active:not(:disabled) {
+  transform: scale(0.97);
+}
+a.card,
+a.card-soft {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+a.card:hover,
+a.card-soft:hover {
+  transform: translateY(-3px);
+}
+.nav-link i {
+  transition: transform 0.2s ease;
+}
+.nav-link:hover i {
+  transform: scale(1.15);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .btn-primary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger,
+  a.card,
+  a.card-soft,
+  .nav-link i {
+    transition: none;
+  }
+  .btn:active:not(:disabled),
+  .btn-primary:active:not(:disabled),
+  .btn-outline:active:not(:disabled),
+  .btn-ghost:active:not(:disabled),
+  .btn-danger:active:not(:disabled),
+  a.card:hover,
+  a.card-soft:hover,
+  .nav-link:hover i {
+    transform: none;
+  }
+}
