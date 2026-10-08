@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Withdrawals · RepairHub admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-5xl" hidden>
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-ink sm:text-3xl">Withdrawals</h1>
+        <p class="mt-1 text-slate-500">Pay providers by bank transfer, then mark the request as paid here.</p>
+      </div>
+      <label class="flex items-center gap-2 text-sm text-slate-600">Show
+        <select id="status" class="input w-auto py-2">
+          <option value="pending">Pending</option>
+          <option value="success">Paid</option>
+          <option value="rejected">Rejected</option>
+          <option value="">All</option>
+        </select>
+      </label>
+    </div>
+    <div id="list" class="mt-6"></div>
+    <div id="pager"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'withdrawals', roles: ['admin'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      let page = 1;
+      let items = [];
+      const STATUS = { pending: ['Pending', 'amber'], success: ['Paid', 'green'], rejected: ['Rejected', 'red'], failed: ['Failed', 'red'] };
+
+      function row(t) {
+        const u = t.userId || {};
+        const b = t.payoutDetails || {};
+        const [label, tone] = STATUS[t.status] || [t.status, 'slate'];
+        return html`<article class="card flex flex-col gap-4 p-5 md:flex-row md:items-center">
+          <div class="flex min-w-0 flex-1 items-center gap-3">
+            ${RH.ui.avatar(u.fullName, 'w-11 h-11 text-sm')}
+            <div class="min-w-0"><p class="truncate font-semibold text-ink">${u.fullName || 'Unknown user'}</p><p class="truncate text-xs text-slate-500">${u.email || ''}</p>
+              <p class="text-xs text-slate-400">Requested ${RH.ui.dateTime(t.createdAt)} · ${t.reference || ''}</p></div>
+          </div>
+          <div class="text-sm md:w-56">
+            <p class="font-medium text-ink">${b.accountName || '—'}</p>
+            <p class="text-slate-500">${b.bankName || ''} · <span class="font-mono">${b.accountNumber || ''}</span></p>
+          </div>
+          <div class="flex items-center justify-between gap-4 md:w-64 md:justify-end">
+            <div class="text-right"><p class="text-lg font-bold text-ink">${RH.ui.money(t.amount)}</p>${RH.ui.toneBadge(label, tone)}</div>
+            ${t.status === 'pending'
+              ? html`<div class="flex flex-col gap-2"><button data-paid="${t._id}" class="btn-primary btn-sm">Mark paid</button><button data-reject="${t._id}" class="btn-danger btn-sm">Reject</button></div>`
+              : ''}
+          </div>
+          ${t.note ? html`<p class="text-xs text-slate-500 md:hidden">Note: ${t.note}</p>` : ''}
+        </article>`;
+      }
+
+      function process(id, decision) {
+        const t = items.find((x) => x._id === id);
+        const u = t.userId || {};
+        const m = RH.ui.modal(decision === 'paid' ? 'Mark withdrawal as paid' : 'Reject withdrawal', html`<form class="space-y-4">
+          <p class="text-sm text-slate-600">${decision === 'paid'
+            ? `Only confirm after you have transferred ${RH.ui.money(t.amount)} to ${(t.payoutDetails || {}).accountName || u.fullName}.`
+            : `${RH.ui.money(t.amount)} will be returned to ${u.fullName || 'the user'}'s wallet.`}</p>
+          <div><label for="note" class="label">Note <span class="font-normal text-slate-400">${decision === 'paid' ? '(optional, e.g. transfer reference)' : '(shown to the user)'}</span></label>
+            <textarea id="note" rows="2" maxlength="500" class="input resize-none"></textarea></div>
+          <div class="flex justify-end gap-3"><button type="button" data-close class="btn-ghost btn-sm">Cancel</button>
+            <button type="submit" class="${decision === 'paid' ? 'btn-primary' : 'btn-danger'} btn-sm">${decision === 'paid' ? 'Mark paid' : 'Reject'}</button></div>
+        </form>`);
+        m.el.querySelector('form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          await RH.ui.withLoading(m.el.querySelector('[type=submit]'), async () => {
+            try {
+              await RH.api.admin.processWithdrawal(id, decision, m.el.querySelector('#note').value.trim());
+              m.close();
+              RH.ui.toast(decision === 'paid' ? 'Marked as paid. The provider has been notified.' : 'Rejected. Funds returned to the wallet.', 'success');
+              load();
+            } catch (err) {
+              RH.ui.toast(err.message, 'error');
+            }
+          }, 'Saving…');
+        });
+      }
+
+      async function load() {
+        setHTML('list', RH.ui.spinner());
+        setHTML('pager', '');
+        try {
+          const status = document.getElementById('status').value;
+          const res = await RH.api.admin.withdrawals({ status, page, limit: 20 });
+          items = res.data;
+          if (!items.length) {
+            setHTML('list', RH.ui.emptyState('fa-money-bill-transfer', 'No withdrawals', status === 'pending' ? 'No payout requests are waiting.' : 'Nothing to show.'));
+            return;
+          }
+          setHTML('list', html`<div class="space-y-3">${items.map(row)}</div>`);
+          setHTML('pager', RH.ui.pager(res.meta));
+          document.querySelectorAll('[data-paid]').forEach((b) => b.addEventListener('click', () => process(b.dataset.paid, 'paid')));
+          document.querySelectorAll('[data-reject]').forEach((b) => b.addEventListener('click', () => process(b.dataset.reject, 'rejected')));
+          document.querySelectorAll('#pager [data-page]').forEach((b) => b.addEventListener('click', () => { page = Number(b.dataset.page); load(); }));
+        } catch (e) {
+          setHTML('list', RH.ui.errorState(e.message, true));
+        }
+      }
+
+      document.getElementById('status').addEventListener('change', () => { page = 1; load(); });
+      load();
+    })();
+  </script>
+</body>
+</html>

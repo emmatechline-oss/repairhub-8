@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin dashboard · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-6xl" hidden>
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-ink sm:text-3xl">Dashboard</h1>
+        <p class="mt-1 text-slate-500">Platform activity and items that need your attention.</p>
+      </div>
+      <button id="auto-release" class="btn-outline btn-sm self-start"><i class="fa-solid fa-rotate"></i>Run escrow auto-release</button>
+    </div>
+    <div id="root" class="mt-6"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'dashboard', roles: ['admin'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+
+      const total = (obj) => Object.values(obj || {}).reduce((a, b) => a + b, 0);
+      const plural = (n, word) => `${n || 0} ${word}${n === 1 ? '' : 's'}`;
+      const label = (s) => (s ? String(s).replace(/_/g, ' ') : '—');
+
+      function actionCard(icon, tone, title, count, text, href) {
+        return html`<a href="${RH.url(href)}" class="card flex items-start gap-4 p-5 transition hover:shadow-md ${count ? '' : 'opacity-70'}">
+          <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${tone}"><i class="fa-solid ${icon}"></i></span>
+          <span class="flex-1"><span class="block text-sm text-slate-500">${title}</span>
+            <span class="block text-2xl font-bold text-ink">${count}</span>
+            <span class="block text-xs text-slate-500">${text}</span></span>
+          <i class="fa-solid fa-chevron-right mt-1 text-xs text-slate-400"></i>
+        </a>`;
+      }
+
+      function breakdown(title, counts, order) {
+        const keys = [...order.filter((k) => counts[k]), ...Object.keys(counts).filter((k) => !order.includes(k))];
+        const max = Math.max(1, ...Object.values(counts));
+        return html`<section class="card p-5">
+          <div class="flex items-baseline justify-between"><h2 class="font-semibold text-ink">${title}</h2><span class="text-sm text-slate-500">${total(counts)} total</span></div>
+          ${keys.length
+            ? html`<ul class="mt-4 space-y-3">${keys.map((k) => html`<li>
+                <div class="flex justify-between text-sm"><span class="capitalize text-slate-600">${label(k)}</span><span class="font-semibold text-ink">${counts[k]}</span></div>
+                <div class="mt-1 h-2 rounded-full bg-slate-100"><div class="h-2 rounded-full bg-brand-600" style="width:${Math.round((counts[k] / max) * 100)}%"></div></div>
+              </li>`)}</ul>`
+            : html`<p class="mt-4 text-sm text-slate-500">Nothing yet.</p>`}
+        </section>`;
+      }
+
+      async function load() {
+        setHTML('root', RH.ui.spinner());
+        try {
+          const { data: s } = await RH.api.admin.stats();
+          setHTML('root', html`
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div class="card p-5"><p class="text-sm text-slate-500">Escrow volume</p><p class="mt-1 text-2xl font-bold text-ink">${RH.ui.money(s.escrowVolume)}</p><p class="text-xs text-slate-500">Successful escrow payments</p></div>
+              <div class="card p-5"><p class="text-sm text-slate-500">Commission earned</p><p class="mt-1 text-2xl font-bold text-brand-600">${RH.ui.money(s.commissionEarned)}</p><p class="text-xs text-slate-500">Platform fees recorded</p></div>
+              <div class="card p-5"><p class="text-sm text-slate-500">Users</p><p class="mt-1 text-2xl font-bold text-ink">${total(s.users)}</p><p class="text-xs text-slate-500">${plural(s.users.customer, 'customer')} · ${plural(s.users.technician, 'technician')}</p></div>
+              <div class="card p-5"><p class="text-sm text-slate-500">Repair jobs</p><p class="mt-1 text-2xl font-bold text-ink">${total(s.jobs)}</p><p class="text-xs text-slate-500">${s.jobs.completed || 0} completed</p></div>
+            </div>
+
+            <h2 class="mt-8 font-semibold text-ink">Needs attention</h2>
+            <div class="mt-3 grid gap-4 md:grid-cols-3">
+              ${actionCard('fa-user-check', 'bg-amber-50 text-amber-600', 'Pending verifications', s.pendingVerifications, 'Technicians and service centers waiting for approval', 'admin/verifications.html')}
+              ${actionCard('fa-scale-balanced', 'bg-red-50 text-red-600', 'Open disputes', s.openDisputes, 'Payments frozen until you rule on them', 'admin/disputes.html')}
+              ${actionCard('fa-money-bill-transfer', 'bg-green-50 text-green-600', 'Pending withdrawals', s.pendingWithdrawals, 'Payout requests to mark paid or reject', 'admin/withdrawals.html')}
+            </div>
+
+            <div class="mt-8 grid gap-4 lg:grid-cols-3">
+              ${breakdown('Repair requests by status', s.requests, ['open', 'quoted', 'booked', 'in_progress', 'completed', 'cancelled'])}
+              ${breakdown('Repair jobs by status', s.jobs, ['accepted', 'diagnosing', 'awaiting_parts', 'in_progress', 'quality_check', 'ready', 'on_hold', 'completed', 'disputed', 'cancelled'])}
+              ${breakdown('Users by role', s.users, ['customer', 'technician', 'service_center', 'admin'])}
+            </div>`);
+        } catch (e) {
+          setHTML('root', RH.ui.errorState(e.message, true));
+        }
+      }
+
+      document.getElementById('auto-release').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const yes = await RH.ui.confirm('Run escrow auto-release?',
+          'Releases escrowed payments to technicians for jobs completed long enough ago that the customer neither confirmed nor disputed them. This normally runs automatically every 10 minutes.',
+          { confirmText: 'Run now' });
+        if (!yes) return;
+        await RH.ui.withLoading(btn, async () => {
+          try {
+            const { data } = await RH.api.admin.runAutoRelease();
+            RH.ui.toast(`Auto-release complete: ${data.released} payment${data.released === 1 ? '' : 's'} released.`, 'success');
+            load();
+          } catch (err) {
+            RH.ui.toast(err.message, 'error');
+          }
+        }, 'Running…');
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>
