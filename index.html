@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RepairHub</title>
+  <!-- Entry point: logged-in users go to their home page, everyone else to role selection. -->
+  <noscript><meta http-equiv="refresh" content="0; url=auth/role.html" /></noscript>
+</head>
+<body>
+  <p style="font-family: sans-serif; padding: 16px">Loading RepairHub… <a href="auth/role.html">Continue</a></p>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script>
+    (function () {
+      const user = RH.auth.getToken() && RH.auth.getUser();
+      const target = user && RH.auth.isSupportedRole(user.role) ? RH.auth.homeFor(user.role) : 'auth/role.html';
+      // Keep ?api=... so the backend choice still works when starting from the root URL.
+      location.replace(RH.url(target) + location.search);
+    })();
+  </script>
+</body>
+</html>
