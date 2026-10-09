@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My quotes · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-4xl" hidden>
+    <h1 class="text-2xl font-bold text-ink sm:text-3xl">My quotes</h1>
+    <p class="mt-1 text-slate-500">Quotes you've sent. When a customer accepts one, it becomes a job once they book a time.</p>
+    <nav id="tabs" class="mt-6 flex gap-5 overflow-x-auto border-b border-slate-200 text-sm" role="tablist"></nav>
+    <div id="list" class="mt-5 space-y-3"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'quotes', roles: ['technician', 'service_center'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      const STATUS = { pending: ['Waiting for customer', 'amber'], accepted: ['Accepted', 'green'], rejected: ['Not chosen', 'slate'], expired: ['Expired', 'slate'], withdrawn: ['Withdrawn', 'slate'] };
+      const TABS = { all: 'All', pending: 'Waiting', accepted: 'Accepted', closed: 'Closed' };
+      let tab = 'all';
+      let items = [];
+
+      const bucket = (q) => (q.status === 'pending' || q.status === 'accepted' ? q.status : 'closed');
+
+      function row(q) {
+        const r = q.repairRequestId || {};
+        const [label, tone] = STATUS[q.status] || [q.status, 'slate'];
+        const expired = q.status === 'pending' && q.expiresAt && new Date(q.expiresAt) < new Date();
+        return html`<article class="card flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+          ${RH.ui.deviceTile(r.itemType, 'w-12 h-12 text-xl')}
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold text-ink">${r.itemType ? `${r.itemType} repair` : 'Repair request'}</p>
+            <p class="text-xs text-slate-500">Sent ${RH.ui.dateTime(q.createdAt)}${q.status === 'pending' && q.expiresAt ? ` · valid until ${RH.ui.shortDate(q.expiresAt)}` : ''}</p>
+            <p class="mt-1 text-xs text-slate-500">${[q.estimatedDays !== undefined && `${q.estimatedDays} day${q.estimatedDays === 1 ? '' : 's'} repair`, q.warrantyDays && `${q.warrantyDays}-day warranty`].filter(Boolean).join(' · ')}</p>
+          </div>
+          <div class="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
+            <p class="text-xl font-bold text-ink">${RH.ui.money(q.price)}</p>
+            ${RH.ui.toneBadge(expired ? 'Expired' : label, expired ? 'slate' : tone)}
+          </div>
+          <div class="sm:w-36">
+            ${q.status === 'pending' && !expired
+              ? html`<button data-withdraw="${q._id}" class="btn-danger btn-sm w-full">Withdraw</button>`
+              : q.status === 'accepted'
+              ? html`<a href="${RH.url('technician/jobs.html')}" class="btn-primary btn-sm w-full">View jobs</a>`
+              : ''}
+          </div>
+        </article>`;
+      }
+
+      function render() {
+        const counts = { all: items.length };
+        ['pending', 'accepted', 'closed'].forEach((b) => (counts[b] = items.filter((q) => bucket(q) === b).length));
+        setHTML('tabs', Object.entries(TABS).map(([k, label]) => html`<button role="tab" data-tab="${k}" aria-selected="${k === tab}" class="-mb-px whitespace-nowrap border-b-2 pb-3 ${k === tab ? 'border-brand-600 font-semibold text-brand-600' : 'border-transparent text-slate-500 hover:text-ink'}">${label} (${counts[k]})</button>`));
+        document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+        const visible = items.filter((q) => tab === 'all' || bucket(q) === tab);
+        if (!visible.length) {
+          setHTML('list', RH.ui.emptyState('fa-file-invoice-dollar', 'No quotes here', items.length ? 'Nothing in this tab.' : 'Send a quote from Job requests to get started.',
+            items.length ? '' : html`<a href="${RH.url('technician/requests.html')}" class="btn-primary btn-sm">Find job requests</a>`));
+          return;
+        }
+        setHTML('list', visible.map(row));
+        document.querySelectorAll('[data-withdraw]').forEach((b) => b.addEventListener('click', async () => {
+          const yes = await RH.ui.confirm('Withdraw this quote?', "The customer will no longer be able to accept it, and you can't send another quote for this request.", { confirmText: 'Withdraw', danger: true });
+          if (!yes) return;
+          await RH.ui.withLoading(b, async () => {
+            try {
+              await RH.api.quotations.withdraw(b.dataset.withdraw);
+              RH.ui.toast('Quote withdrawn.', 'success');
+              load();
+            } catch (e) {
+              RH.ui.toast(e.message, 'error');
+            }
+          });
+        }));
+      }
+
+      async function load() {
+        setHTML('list', RH.ui.spinner());
+        try {
+          items = (await RH.api.quotations.mine()).data;
+          render();
+        } catch (e) {
+          setHTML('list', RH.ui.errorState(e.message, true));
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

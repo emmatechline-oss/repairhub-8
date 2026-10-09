@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My jobs · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-5xl" hidden>
+    <h1 class="text-2xl font-bold text-ink sm:text-3xl">My jobs</h1>
+    <p class="mt-1 text-slate-500">Booked repairs. Keep the customer updated by moving each job through its stages.</p>
+    <nav id="tabs" class="mt-6 flex gap-5 overflow-x-auto border-b border-slate-200 text-sm" role="tablist"></nav>
+    <div id="list" class="mt-5 space-y-4"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/tech.js"></script>
+  <script src="../assets/js/disputes.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'jobs', roles: ['technician', 'service_center'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      const TABS = { active: 'Active', completed: 'Completed', closed: 'Cancelled & disputed' };
+      const ACTION = {
+        diagnosing: ['Start diagnosis', 'fa-magnifying-glass'],
+        awaiting_parts: ['Waiting for parts', 'fa-box-open'],
+        in_progress: ['Start repair', 'fa-screwdriver-wrench'],
+        quality_check: ['Quality check', 'fa-list-check'],
+        ready: ['Mark ready', 'fa-circle-check'],
+        on_hold: ['Put on hold', 'fa-pause'],
+        completed: ['Mark completed', 'fa-flag-checkered'],
+      };
+      let tab = 'active';
+      let rows = [];
+      const isCenter = user.role === 'service_center';
+
+      const bucket = (j) => (j.status === 'completed' ? 'completed' : ['cancelled', 'disputed'].includes(j.status) ? 'closed' : 'active');
+      const paid = (j) => ['held', 'cash'].includes(j.payment.status);
+
+      function card({ job, appt, dispute, warranty, worker }) {
+        const r = job.repairRequestId || {};
+        const mode = appt && RH.data.SERVICE_MODES[appt.serviceMode];
+        const next = RH.tech.TRANSITIONS[job.status] || [];
+        const contact = job.contact || {};
+        return html`<article class="card p-5">
+          <div class="flex flex-wrap items-start gap-4">
+            ${RH.ui.deviceTile(r.itemType, 'w-14 h-14 text-2xl')}
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold text-ink">${r.itemType ? `${r.itemType} repair` : 'Repair job'}${r.brandModel ? ` · ${r.brandModel}` : ''}</p>
+              <p class="text-xs text-slate-500">Job ${RH.ui.ref(job._id, 'JB')} · booked ${RH.ui.dateTime(job.createdAt)}</p>
+            </div>
+            <div class="flex flex-col items-end gap-1">
+              <p class="text-lg font-bold text-ink">${RH.ui.money(job.price)}</p>
+              ${RH.ui.badge(job.status)}
+            </div>
+          </div>
+          <div class="mt-3 h-2 rounded-full bg-slate-100"><div class="h-2 rounded-full ${job.status === 'cancelled' ? 'bg-red-400' : 'bg-green-500'}" style="width:${Math.max(job.progress || 0, 3)}%"></div></div>
+
+          <div class="mt-4 grid gap-4 text-sm md:grid-cols-3">
+            <div><p class="text-xs text-slate-500">Customer</p><p class="font-medium text-ink">${contact.name || '—'}</p>
+              ${contact.phone ? html`<a href="tel:${contact.phone}" class="text-brand-600 hover:underline"><i class="fa-solid fa-phone mr-1"></i>${contact.phone}</a>` : ''}</div>
+            <div><p class="text-xs text-slate-500">Appointment</p><p class="font-medium text-ink">${appt ? RH.ui.dateTime(appt.scheduledAt) : '—'}</p>
+              <p class="text-slate-500">${mode ? mode.label : ''}${appt && appt.status !== 'scheduled' ? ` · ${appt.status}` : ''}</p></div>
+            <div><p class="text-xs text-slate-500">Address</p><p class="font-medium text-ink">${(appt && appt.address) || r.address || '—'}</p></div>
+          </div>
+          ${isCenter ? html`<p class="mt-3 text-sm"><span class="text-xs text-slate-500">Assigned technician:</span> <span class="font-medium text-ink">${RH.data.techName(worker)}</span></p>` : ''}
+          <p class="mt-3 text-sm text-slate-600"><span class="text-xs text-slate-500">Problem:</span> ${r.problemDescription || '—'}</p>
+          ${appt && appt.notes ? html`<p class="mt-1 text-sm text-slate-600"><span class="text-xs text-slate-500">Customer notes:</span> ${appt.notes}</p>` : ''}
+          <p class="mt-1 text-sm"><span class="text-xs text-slate-500">Payment:</span> <span class="font-medium ${paid(job) || ['released', 'cash_settled'].includes(job.payment.status) ? 'text-green-700' : 'text-amber-700'}">${RH.ui.statusLabel(job.payment.status)}</span></p>
+
+          ${job.status === 'disputed' ? html`<p class="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700"><i class="fa-solid fa-scale-balanced mr-1"></i>This job is under dispute. Payment is frozen until RepairHub support resolves it.</p>` : ''}
+          ${job.status === 'completed'
+            ? html`<p class="mt-4 rounded-xl bg-green-50 p-3 text-sm text-green-800"><i class="fa-solid fa-circle-check mr-1"></i>${job.customerConfirmedAt ? `Customer confirmed on ${RH.ui.dateTime(job.customerConfirmedAt)}.` : 'Waiting for the customer to confirm. Escrowed payment is released automatically if they don\'t respond.'}</p>`
+            : ''}
+
+          ${dispute ? html`<div class="mt-4">${RH.disputes.panel(dispute)}</div>` : ''}
+          ${warrantySection(warranty)}
+          ${extraActions(job, appt, dispute)}
+          ${next.length
+            ? html`<div class="mt-4 border-t border-slate-100 pt-4">
+                ${!paid(job) ? html`<p class="mb-3 text-xs text-amber-700"><i class="fa-solid fa-clock mr-1"></i>Repair work can start once the customer pays (escrow) or chooses pay on delivery.</p>` : ''}
+                <div class="flex flex-wrap gap-2">${next.map((s) => {
+                  const [label, icon] = ACTION[s] || [s, 'fa-arrow-right'];
+                  const blocked = RH.tech.NEEDS_PAYMENT.includes(s) && !paid(job);
+                  return html`<button data-job="${job._id}" data-status="${s}" class="${s === 'completed' ? 'btn-primary' : 'btn-outline'} btn-sm" ${blocked ? RH.ui.raw('disabled title="Waiting for payment"') : ''}><i class="fa-solid ${icon}"></i>${label}</button>`;
+                })}</div>
+              </div>`
+            : ''}
+        </article>`;
+      }
+
+      const changeable = (job, appt) => appt && ['scheduled', 'rescheduled'].includes(appt.status) && ['accepted', 'diagnosing', 'on_hold'].includes(job.status);
+
+      function warrantySection(w) {
+        if (!w) return '';
+        const active = new Date(w.expiresAt) > new Date();
+        const claims = [...(w.claims || [])].reverse();
+        return html`<div class="mt-4 rounded-2xl border ${claims.some((c) => c.status === 'open') ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'} p-4 text-sm">
+          <p class="font-semibold text-ink"><i class="fa-solid fa-shield-halved mr-1 text-brand-600"></i>${w.durationDays}-day warranty · ${active ? `valid until ${RH.ui.date(w.expiresAt)}` : 'expired'}</p>
+          ${claims.length
+            ? html`<ul class="mt-3 space-y-3">${claims.map((c) => html`<li class="rounded-xl bg-white p-3">
+                <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-xs text-slate-500">Claim filed ${RH.ui.dateTime(c.createdAt)}</span>
+                  ${c.status === 'open' ? RH.ui.toneBadge('Needs your response', 'amber') : RH.ui.badge(c.status)}</div>
+                <p class="mt-1 text-ink">${c.description}</p>
+                ${c.resolutionNote ? html`<p class="mt-1 text-xs text-slate-500">Your response: ${c.resolutionNote}</p>` : ''}
+                ${c.status === 'open'
+                  ? html`<div class="mt-3 flex flex-wrap gap-2"><button data-claim="${w._id}|${c._id}|resolved" class="btn-primary btn-sm"><i class="fa-solid fa-check"></i>Mark resolved</button>
+                      <button data-claim="${w._id}|${c._id}|rejected" class="btn-danger btn-sm">Reject claim</button></div>`
+                  : ''}
+              </li>`)}</ul>`
+            : html`<p class="mt-1 text-xs text-slate-500">No warranty claims.</p>`}
+        </div>`;
+      }
+
+      function extraActions(job, appt, dispute) {
+        const btns = [];
+        if (changeable(job, appt)) {
+          btns.push(html`<button data-reschedule="${job._id}" class="btn-ghost btn-sm"><i class="fa-regular fa-calendar"></i>Reschedule</button>`);
+          btns.push(html`<button data-cancel="${job._id}" class="btn-ghost btn-sm text-red-600 hover:bg-red-50"><i class="fa-solid fa-xmark"></i>Cancel booking</button>`);
+        }
+        if (RH.disputes.canOpen(job) && !(dispute && dispute.status === 'open')) {
+          btns.push(html`<button data-dispute="${job._id}" class="btn-ghost btn-sm text-red-600 hover:bg-red-50"><i class="fa-solid fa-triangle-exclamation"></i>Report a problem</button>`);
+        }
+        return btns.length ? html`<div class="mt-4 flex flex-wrap gap-2">${btns}</div>` : '';
+      }
+
+      const rowOf = (jobId) => rows.find((x) => x.job._id === jobId);
+
+      function resolveClaim(btn) {
+        const [wid, cid, status] = btn.dataset.claim.split('|');
+        const ok = status === 'resolved';
+        const m = RH.ui.modal(ok ? 'Mark claim resolved' : 'Reject warranty claim', html`<form class="space-y-4">
+          <div><label for="note" class="label">Message to the customer ${ok ? html`<span class="font-normal text-slate-400">(optional)</span>` : ''}</label>
+            <textarea id="note" rows="3" maxlength="500" class="input resize-none" placeholder="${ok ? 'e.g. Replaced the faulty connector under warranty' : 'e.g. Damage is from a new drop, not covered by this repair'}"></textarea></div>
+          <div class="flex justify-end gap-3"><button type="button" data-close class="btn-ghost btn-sm">Cancel</button><button type="submit" class="${ok ? 'btn-primary' : 'btn-danger'} btn-sm">${ok ? 'Mark resolved' : 'Reject claim'}</button></div>
+        </form>`);
+        m.el.querySelector('form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const note = m.el.querySelector('#note').value.trim();
+          if (!ok && !note) return RH.ui.toast('Tell the customer why the claim is rejected.', 'error');
+          await RH.ui.withLoading(m.el.querySelector('[type=submit]'), async () => {
+            try {
+              await RH.api.warranties.resolveClaim(wid, cid, status, note);
+              m.close();
+              RH.ui.toast('Claim updated. The customer has been notified.', 'success');
+              load();
+            } catch (err) {
+              RH.ui.toast(err.message, 'error');
+            }
+          }, 'Saving…');
+        });
+      }
+
+      function reschedule(jobId) {
+        const { appt } = rowOf(jobId);
+        const min = new Date(Date.now() + 60 * 60000);
+        const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        const m = RH.ui.modal('Reschedule appointment', html`<form class="space-y-4">
+          <div><label for="new-time" class="label">New date &amp; time</label>
+            <input id="new-time" type="datetime-local" min="${local(min)}" value="${local(new Date(Math.max(new Date(appt.scheduledAt), min)))}" class="input" /></div>
+          <p class="text-xs text-slate-500">The customer is notified of the new time.</p>
+          <div class="flex justify-end gap-3"><button type="button" data-close class="btn-ghost btn-sm">Cancel</button><button type="submit" class="btn-primary btn-sm">Save</button></div>
+        </form>`);
+        m.el.querySelector('form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const v = m.el.querySelector('#new-time').value;
+          if (!v || new Date(v) <= new Date()) return RH.ui.toast('Choose a time in the future.', 'error');
+          await RH.ui.withLoading(m.el.querySelector('[type=submit]'), async () => {
+            try {
+              await RH.api.appointments.reschedule(appt._id, new Date(v).toISOString());
+              m.close();
+              RH.ui.toast('Appointment rescheduled.', 'success');
+              load();
+            } catch (err) {
+              RH.ui.toast(err.message, 'error');
+            }
+          });
+        });
+      }
+
+      function cancelBooking(jobId) {
+        const { appt, job } = rowOf(jobId);
+        const refund = job.payment.status === 'held' ? ' and their escrowed payment is refunded in full' : '';
+        const m = RH.ui.modal('Cancel booking?', html`<form class="space-y-4">
+          <p class="text-sm text-slate-600">The customer is notified${refund}. The repair request is closed.</p>
+          <div><label for="reason" class="label">Reason</label><textarea id="reason" rows="3" maxlength="500" class="input resize-none"></textarea></div>
+          <div class="flex justify-end gap-3"><button type="button" data-close class="btn-ghost btn-sm">Keep booking</button><button type="submit" class="btn-danger btn-sm">Cancel booking</button></div>
+        </form>`);
+        m.el.querySelector('form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          await RH.ui.withLoading(m.el.querySelector('[type=submit]'), async () => {
+            try {
+              await RH.api.appointments.cancel(appt._id, m.el.querySelector('#reason').value.trim());
+              m.close();
+              RH.ui.toast('Booking cancelled.', 'success');
+              load();
+            } catch (err) {
+              RH.ui.toast(err.message, 'error');
+            }
+          });
+        });
+      }
+
+      function render() {
+        const counts = {};
+        Object.keys(TABS).forEach((k) => (counts[k] = rows.filter((x) => bucket(x.job) === k).length));
+        setHTML('tabs', Object.entries(TABS).map(([k, label]) => html`<button role="tab" data-tab="${k}" aria-selected="${k === tab}" class="-mb-px whitespace-nowrap border-b-2 pb-3 ${k === tab ? 'border-brand-600 font-semibold text-brand-600' : 'border-transparent text-slate-500 hover:text-ink'}">${label} (${counts[k]})</button>`));
+        document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; render(); }));
+        const visible = rows.filter((x) => bucket(x.job) === tab);
+        if (!visible.length) {
+          setHTML('list', RH.ui.emptyState('fa-screwdriver-wrench', 'No jobs here', tab === 'active' ? 'When a customer accepts your quote and books a time, the job appears here.' : 'Nothing in this tab yet.'));
+          return;
+        }
+        setHTML('list', visible.map(card));
+        document.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', () => update(b)));
+        document.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', () => resolveClaim(b)));
+        document.querySelectorAll('[data-reschedule]').forEach((b) => b.addEventListener('click', () => reschedule(b.dataset.reschedule)));
+        document.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => cancelBooking(b.dataset.cancel)));
+        document.querySelectorAll('[data-dispute]').forEach((b) => b.addEventListener('click', () => RH.disputes.open(rowOf(b.dataset.dispute).job, load, { who: 'technician' })));
+      }
+
+      function update(btn) {
+        const status = btn.dataset.status;
+        const [label] = ACTION[status] || [status];
+        const m = RH.ui.modal(label, html`<form class="space-y-4">
+          <p class="text-sm text-slate-600">${status === 'completed'
+            ? 'The customer is notified to inspect and confirm the repair, and the warranty starts now.'
+            : `The customer will see the job as "${RH.ui.statusLabel(status)}".`}</p>
+          <div><label for="note" class="label">Note for the customer <span class="font-normal text-slate-400">(optional)</span></label>
+            <textarea id="note" rows="2" maxlength="500" class="input resize-none" placeholder="e.g. Replaced the screen panel, testing now"></textarea></div>
+          <div class="flex justify-end gap-3"><button type="button" data-close class="btn-ghost btn-sm">Cancel</button><button type="submit" class="btn-primary btn-sm">${label}</button></div>
+        </form>`);
+        m.el.querySelector('form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          await RH.ui.withLoading(m.el.querySelector('[type=submit]'), async () => {
+            try {
+              await RH.api.jobs.updateStatus(btn.dataset.job, status, m.el.querySelector('#note').value.trim());
+              m.close();
+              RH.ui.toast('Job updated. The customer has been notified.', 'success');
+              load();
+            } catch (err) {
+              RH.ui.toast(err.message, 'error');
+            }
+          }, 'Saving…');
+        });
+      }
+
+      async function load() {
+        setHTML('list', RH.ui.spinner());
+        try {
+          const [{ data: jobs }, disputes] = await Promise.all([
+            RH.api.jobs.list({ limit: 100 }),
+            RH.disputes.byJob().catch(() => new Map()),
+          ]);
+          rows = await Promise.all(jobs.map(async (j) => {
+            const [full, appt, warranty, worker] = await Promise.all([
+              RH.api.jobs.get(j._id).then((r) => r.data).catch(() => j),
+              RH.api.appointments.get(j.appointmentId).then((r) => r.data).catch(() => null),
+              j.status === 'completed' ? RH.api.warranties.byJob(j._id).then((r) => r.data).catch(() => null) : null,
+              isCenter ? RH.data.technician(j.technicianId) : null,
+            ]);
+            return { job: full, appt, warranty, worker, dispute: disputes.get(String(j._id)) };
+          }));
+          const openClaims = rows.filter((x) => x.warranty && x.warranty.claims.some((c) => c.status === 'open')).length;
+          if (openClaims) RH.ui.toast(`${openClaims} warranty claim${openClaims === 1 ? ' needs' : 's need'} your response (Completed tab).`, 'info');
+          render();
+        } catch (e) {
+          setHTML('list', RH.ui.errorState(e.message, true));
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

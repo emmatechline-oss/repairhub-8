@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Technician · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <!-- No technician designs exist; these pages follow the customer pages' style. -->
+  <main id="page-content" class="mx-auto max-w-4xl" hidden>
+    <div id="root"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/tech.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'overview', roles: ['technician', 'service_center'] });
+      const isCenter = user && user.role === 'service_center';
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+
+      const STATUS = {
+        pending: ['amber', 'fa-hourglass-half', 'Verification pending', 'An admin will review your documents. Once verified you can receive repair requests and send quotations.'],
+        verified: ['green', 'fa-circle-check', 'Verified technician', 'Your account is verified. Customers in your service categories can receive your quotations.'],
+        rejected: ['red', 'fa-circle-xmark', 'Verification rejected', 'Your verification was not approved. Review the feedback, then upload new documents to be reviewed again.'],
+      };
+      // Same limits as the API (middleware/upload.js): 5 files per upload, 25MB each, images or PDF.
+      const MAX_FILES = 5;
+      const MAX_BYTES = 25 * 1024 * 1024;
+      const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      let files = [];
+
+      const isImage = (url) => /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
+
+      function docsSection(p) {
+        const docs = p.verificationDocs || [];
+        return html`<section class="card mt-6 p-6">
+          <h2 class="text-lg font-semibold text-ink">Verification documents</h2>
+          <p class="mt-1 text-sm text-slate-600">Upload a government-issued ID and proof of your trade (certificate, CAC registration or previous work).
+            ${docs.length ? '' : html`<b class="text-ink">An admin can't approve your account until you upload at least one document.</b>`}</p>
+
+          ${docs.length
+            ? html`<p class="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">Submitted (${docs.length})</p>
+              <div class="mt-2 flex flex-wrap gap-3">${docs.map((u, i) => isImage(u)
+                ? html`<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="Document ${i + 1}" class="h-24 w-24 rounded-xl border border-slate-200 object-cover" /></a>`
+                : html`<a href="${u}" target="_blank" rel="noopener" class="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 text-xs text-brand-600 hover:bg-brand-50"><i class="fa-regular fa-file-pdf text-2xl"></i>Document ${i + 1}</a>`)}</div>`
+            : ''}
+
+          <form id="docs-form" class="mt-5" novalidate>
+            <label for="docs" id="dropzone" class="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 transition hover:border-brand-200 hover:bg-brand-50/40">
+              <i class="fa-solid fa-file-arrow-up text-2xl text-brand-600"></i>
+              <span>Drag and drop files here, or <span class="font-semibold text-brand-600">click to choose</span></span>
+              <span class="text-xs">JPG, PNG, WEBP or PDF · up to ${MAX_FILES} files, 25MB each</span>
+            </label>
+            <input id="docs" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple class="sr-only" />
+            <ul id="file-list" class="mt-3 space-y-2"></ul>
+            <button type="submit" id="upload-btn" class="btn-primary mt-4 w-full sm:w-auto" disabled><i class="fa-solid fa-upload"></i>Upload documents</button>
+          </form>
+        </section>`;
+      }
+
+      function renderFiles() {
+        setHTML('file-list', files.map((f, i) => html`<li class="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+          <i class="fa-regular ${f.type === 'application/pdf' ? 'fa-file-pdf text-red-500' : 'fa-file-image text-brand-600'}"></i>
+          <span class="min-w-0 flex-1 truncate text-ink">${f.name}</span>
+          <span class="text-xs text-slate-400">${(f.size / 1024 / 1024).toFixed(1)} MB</span>
+          <button type="button" data-remove="${i}" class="text-slate-400 hover:text-red-600" aria-label="Remove ${f.name}"><i class="fa-solid fa-xmark"></i></button>
+        </li>`));
+        document.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', () => { files.splice(Number(b.dataset.remove), 1); renderFiles(); }));
+        document.getElementById('upload-btn').disabled = !files.length;
+      }
+
+      function addFiles(list) {
+        for (const f of list) {
+          if (files.length >= MAX_FILES) { RH.ui.toast(`You can upload up to ${MAX_FILES} files at a time.`, 'error'); break; }
+          if (!ALLOWED.includes(f.type)) { RH.ui.toast(`${f.name}: only JPG, PNG, WEBP or PDF files are allowed.`, 'error'); continue; }
+          if (f.size > MAX_BYTES) { RH.ui.toast(`${f.name} is larger than 25MB.`, 'error'); continue; }
+          files.push(f);
+        }
+        renderFiles();
+      }
+
+      function bindUpload(p) {
+        const input = document.getElementById('docs');
+        const dz = document.getElementById('dropzone');
+        input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
+        ['dragenter', 'dragover'].forEach((t) => dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.add('border-brand-600'); }));
+        ['dragleave', 'drop'].forEach((t) => dz.addEventListener(t, () => dz.classList.remove('border-brand-600')));
+        dz.addEventListener('drop', (e) => { e.preventDefault(); addFiles(e.dataTransfer.files); });
+
+        document.getElementById('docs-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          if (!files.length) return;
+          await RH.ui.withLoading(document.getElementById('upload-btn'), async () => {
+            const fd = new FormData();
+            files.forEach((f) => fd.append('docs', f));
+            try {
+              await (isCenter ? RH.api.serviceCenters.uploadDocs : RH.api.technicians.uploadDocs)(p._id, fd);
+              files = [];
+              RH.ui.toast(p.verificationStatus === 'rejected' ? 'Documents uploaded. Your account is back in the review queue.' : 'Documents uploaded. An admin will review them.', 'success');
+              load();
+            } catch (err) {
+              RH.ui.toast(err.status >= 500 ? "We couldn't upload your documents. Please try again." : err.message, 'error');
+            }
+          }, 'Uploading…');
+        });
+      }
+
+      function load() {
+        setHTML('root', RH.ui.spinner());
+        RH.tech.profile(true)
+          .then((p) => {
+            const [tone, icon, title, text] = STATUS[p.verificationStatus] || STATUS.pending;
+            setHTML('root', html`<h1 class="text-2xl font-bold text-ink">Hi ${isCenter ? p.businessName : user.fullName.split(' ')[0]}</h1>
+              <p class="mt-1 text-slate-500">${isCenter ? 'Welcome to RepairHub for repair shops.' : 'Welcome to RepairHub for technicians.'}</p>
+              <section class="card mt-6 flex flex-col gap-4 p-6 sm:flex-row sm:items-start">
+                <span class="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl ${
+                  tone === 'green' ? 'bg-green-50 text-green-600' : tone === 'red' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+                }"><i class="fa-solid ${icon}"></i></span>
+                <div class="flex-1">
+                  <p class="text-lg font-semibold text-ink">${title}</p>
+                  <p class="mt-1 text-sm text-slate-600">${text}</p>
+                  ${p.verificationFeedback ? html`<p class="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">${p.verificationFeedback}</p>` : ''}
+                  <div class="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                    <div class="rounded-xl bg-slate-50 p-3"><p class="text-xs text-slate-500">Rating</p><p class="font-semibold text-ink">${p.ratingAvg ? p.ratingAvg.toFixed(1) : 'New'}</p></div>
+                    <div class="rounded-xl bg-slate-50 p-3"><p class="text-xs text-slate-500">Jobs completed</p><p class="font-semibold text-ink">${p.jobsCompleted || 0}</p></div>
+                    <div class="rounded-xl bg-slate-50 p-3"><p class="text-xs text-slate-500">Verification documents</p><p class="font-semibold text-ink">${(p.verificationDocs || []).length}</p></div>
+                  </div>
+                </div>
+              </section>
+              ${docsSection(p)}
+              ${toolLinks(p)}
+              <section class="mt-6"><h2 class="font-semibold text-ink">Your reviews</h2><div id="reviews" class="mt-3"></div></section>`);
+            bindUpload(p);
+            if (!isCenter) loadReviews(p);
+            else document.getElementById('reviews').closest('section').remove();
+          })
+          .catch((e) => setHTML('root', RH.ui.errorState(e.message, true)));
+      }
+
+      // Shortcuts to the technician tools; job requests need a verified account.
+      async function loadReviews(p) {
+        setHTML('reviews', RH.ui.spinner(''));
+        try {
+          const { data, meta } = await RH.api.reviews.forTechnician(p._id, { limit: 10 });
+          if (!data.length) {
+            setHTML('reviews', html`<p class="card p-5 text-sm text-slate-500">No reviews yet. Customers can rate you after a completed repair.</p>`);
+            return;
+          }
+          setHTML('reviews', html`<div class="card p-5">
+            <div class="flex items-center gap-3"><span class="text-3xl font-bold text-ink">${(p.ratingAvg || 0).toFixed(1)}</span>
+              <span>${RH.ui.stars(p.ratingAvg, 'text-base')}<span class="block text-xs text-slate-500">${meta.total} review${meta.total === 1 ? '' : 's'}</span></span></div>
+            <ul class="mt-4 divide-y divide-slate-100">${data.map((r) => html`<li class="py-3">
+              <div class="flex items-center justify-between gap-3">${RH.ui.stars(r.rating)}<span class="text-xs text-slate-400">${RH.ui.date(r.createdAt)}</span></div>
+              ${r.comment ? html`<p class="mt-1 text-sm text-slate-700">${r.comment}</p>` : ''}
+              ${r.tags && r.tags.length ? html`<p class="mt-2 flex flex-wrap gap-1">${r.tags.map((t) => html`<span class="badge bg-brand-50 text-brand-700">${t}</span>`)}</p>` : ''}
+            </li>`)}</ul>
+          </div>`);
+        } catch (e) {
+          setHTML('reviews', html`<p class="text-sm text-slate-500">${e.message}</p>`);
+        }
+      }
+
+      const toolLinks = (p) => html`<div class="mt-6 grid gap-4 sm:grid-cols-2">
+        ${[
+          ['technician/requests.html', 'fa-inbox', 'Job requests', p.verificationStatus === 'verified' ? 'Find repair requests near you and send quotes' : 'Available once your account is verified'],
+          ['technician/jobs.html', 'fa-screwdriver-wrench', 'My jobs', 'Update the status of booked repairs'],
+          isCenter
+            ? ['center/profile.html', 'fa-id-card', 'Shop profile', 'Business details, categories and shop location']
+            : ['technician/profile.html', 'fa-id-card', 'Profile', 'Set your categories, service areas and base location'],
+          ...(isCenter ? [['center/team.html', 'fa-users-gear', 'Team', 'Add the technicians who work at your shop']] : []),
+          ['technician/wallet.html', 'fa-wallet', 'Wallet', 'See your earnings and request withdrawals'],
+        ].map(([href, icon, title, text]) => html`<a href="${RH.url(href)}" class="card flex items-start gap-4 p-5 transition hover:shadow-md">
+          <span class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><i class="fa-solid ${icon}"></i></span>
+          <span><span class="block font-semibold text-ink">${title}</span><span class="block text-sm text-slate-500">${text}</span></span></a>`)}
+      </div>`;
+
+      load();
+    })();
+  </script>
+</body>
+</html>

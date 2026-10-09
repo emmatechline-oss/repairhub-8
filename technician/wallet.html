@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wallet · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-4xl" hidden>
+    <h1 class="text-2xl font-bold text-ink sm:text-3xl">Wallet</h1>
+    <p class="mt-1 text-slate-500">Payments are released here when a customer confirms a repair (minus the platform commission).</p>
+    <div id="summary" class="mt-6"></div>
+
+    <form id="withdraw-form" class="card mt-6 space-y-4 p-5 sm:p-6" novalidate>
+      <h2 class="font-semibold text-ink">Withdraw to your bank</h2>
+      <p data-form-error class="hidden rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div><label for="amount" class="label">Amount (₦)</label><input id="amount" name="amount" type="number" min="1" step="1" class="input" placeholder="5000" /></div>
+        <div><label for="bankName" class="label">Bank</label><input id="bankName" name="bankName" maxlength="80" class="input" placeholder="e.g. GTBank" /></div>
+        <div><label for="accountNumber" class="label">Account number</label><input id="accountNumber" name="accountNumber" inputmode="numeric" maxlength="10" class="input" placeholder="10 digits" /></div>
+        <div><label for="accountName" class="label">Account name</label><input id="accountName" name="accountName" maxlength="120" class="input" /></div>
+      </div>
+      <p class="text-xs text-slate-500">The amount leaves your wallet now. An admin pays it out by bank transfer; if they reject it, the money comes back to your wallet.</p>
+      <button type="submit" class="btn-primary">Request withdrawal</button>
+    </form>
+
+    <section class="mt-6">
+      <h2 class="font-semibold text-ink">Transactions</h2>
+      <div id="txns" class="mt-3"></div>
+      <div id="pager"></div>
+    </section>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'wallet', roles: ['technician', 'service_center'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      const form = document.getElementById('withdraw-form');
+      form.accountName.value = user.fullName || '';
+      let wallet = null;
+      let page = 1;
+
+      const TYPES = {
+        payout: ['Job payment', 'fa-arrow-down', 'text-green-600', '+'],
+        withdrawal: ['Withdrawal', 'fa-arrow-up', 'text-slate-600', '−'],
+        commission: ['Commission', 'fa-percent', 'text-amber-600', '−'],
+        refund: ['Refund', 'fa-rotate-left', 'text-green-600', '+'],
+        topup: ['Top-up', 'fa-plus', 'text-green-600', '+'],
+        escrow_payment: ['Escrow payment', 'fa-lock', 'text-slate-600', ''],
+      };
+      const STATUS = { pending: ['Pending', 'amber'], success: ['Done', 'green'], failed: ['Failed', 'red'], rejected: ['Rejected', 'red'] };
+
+      async function loadWallet() {
+        setHTML('summary', RH.ui.spinner());
+        try {
+          wallet = (await RH.api.wallet.me()).data;
+          setHTML('summary', html`<div class="grid gap-4 sm:grid-cols-3">
+            <div class="card p-5"><p class="text-sm text-slate-500">Available to withdraw</p><p class="mt-1 text-3xl font-bold text-brand-600">${RH.ui.money(wallet.withdrawable)}</p></div>
+            <div class="card p-5"><p class="text-sm text-slate-500">Wallet balance</p><p class="mt-1 text-2xl font-bold text-ink">${RH.ui.money(wallet.balance)}</p></div>
+            <div class="card p-5"><p class="text-sm text-slate-500">Commission owed</p><p class="mt-1 text-2xl font-bold text-ink">${RH.ui.money(wallet.commissionOwed || 0)}</p>
+              <p class="text-xs text-slate-500">From pay-on-delivery jobs; deducted from your balance before withdrawals.</p></div>
+          </div>`);
+        } catch (e) {
+          setHTML('summary', RH.ui.errorState(e.message, true));
+        }
+      }
+
+      async function loadTxns() {
+        setHTML('txns', RH.ui.spinner());
+        setHTML('pager', '');
+        try {
+          const res = await RH.api.wallet.transactions({ page, limit: 15 });
+          const list = res.data.filter((t) => t.type !== 'escrow_payment');
+          if (!list.length) {
+            setHTML('txns', RH.ui.emptyState('fa-receipt', 'No transactions yet', 'Payments for completed jobs will show here.'));
+            return;
+          }
+          setHTML('txns', html`<div class="card divide-y divide-slate-100 px-5">${list.map((t) => {
+            const [label, icon, color, sign] = TYPES[t.type] || [t.type, 'fa-circle', 'text-slate-600', ''];
+            const [sLabel, sTone] = STATUS[t.status] || [t.status, 'slate'];
+            return html`<div class="flex items-center gap-4 py-3">
+              <span class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-50 ${color}"><i class="fa-solid ${icon} text-sm"></i></span>
+              <div class="min-w-0 flex-1"><p class="text-sm font-medium text-ink">${label}</p><p class="truncate text-xs text-slate-500">${RH.ui.dateTime(t.createdAt)}${t.note ? ` · ${t.note}` : ''}</p></div>
+              <div class="text-right"><p class="font-semibold ${color}">${sign}${RH.ui.money(t.amount)}</p>${RH.ui.toneBadge(sLabel, sTone)}</div>
+            </div>`;
+          })}</div>`);
+          setHTML('pager', RH.ui.pager(res.meta));
+          document.querySelectorAll('#pager [data-page]').forEach((b) => b.addEventListener('click', () => { page = Number(b.dataset.page); loadTxns(); }));
+        } catch (e) {
+          setHTML('txns', RH.ui.errorState(e.message, true));
+        }
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        RH.ui.clearErrors(form);
+        const amount = Math.floor(Number(form.amount.value));
+        const accountNumber = form.accountNumber.value.replace(/\s/g, '');
+        let ok = true;
+        const fail = (f, m) => { RH.ui.fieldError(form, f, m); ok = false; };
+        if (!amount || amount < 1) fail('amount', 'Enter an amount.');
+        else if (wallet && amount > wallet.withdrawable) fail('amount', `You can withdraw up to ${RH.ui.money(wallet.withdrawable)}.`);
+        if (!form.bankName.value.trim()) fail('bankName', 'Enter your bank.');
+        if (!/^\d{10}$/.test(accountNumber)) fail('accountNumber', 'Account number must be 10 digits.');
+        if (!form.accountName.value.trim()) fail('accountName', 'Enter the account name.');
+        if (!ok) return;
+        const yes = await RH.ui.confirm('Request withdrawal?', `${RH.ui.money(amount)} will be sent to ${form.accountName.value.trim()}, ${form.bankName.value.trim()} ${accountNumber}.`, { confirmText: 'Request withdrawal' });
+        if (!yes) return;
+        await RH.ui.withLoading(form.querySelector('[type=submit]'), async () => {
+          try {
+            await RH.api.wallet.withdraw({ amount, bankName: form.bankName.value.trim(), accountNumber, accountName: form.accountName.value.trim() });
+            form.amount.value = '';
+            RH.ui.toast('Withdrawal requested. You will be notified when it is paid.', 'success');
+            loadWallet();
+            loadTxns();
+          } catch (err) {
+            RH.ui.showFormError(form, err);
+          }
+        }, 'Requesting…');
+      });
+
+      loadWallet();
+      loadTxns();
+    })();
+  </script>
+</body>
+</html>

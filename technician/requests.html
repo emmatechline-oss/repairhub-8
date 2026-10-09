@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job requests · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-5xl" hidden>
+    <h1 class="text-2xl font-bold text-ink sm:text-3xl">Job requests</h1>
+    <p class="mt-1 text-slate-500">Open repair requests in your service categories. Send a quote to win the job.</p>
+
+    <div id="banner" class="mt-4"></div>
+
+    <form id="filters" class="card mt-4 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[1.3fr_0.8fr_1fr_auto] lg:items-end">
+      <div>
+        <label for="near" class="label">Location</label>
+        <select id="near" class="input">
+          <option value="">Anywhere</option>
+          <option value="current">Near my current location</option>
+          <option value="base">Near my base location</option>
+        </select>
+      </div>
+      <div>
+        <label for="radius" class="label">Within</label>
+        <select id="radius" class="input">
+          <option value="5">5 km</option>
+          <option value="10">10 km</option>
+          <option value="25" selected>25 km</option>
+          <option value="50">50 km</option>
+          <option value="100">100 km</option>
+          <option value="200">200 km</option>
+        </select>
+      </div>
+      <div>
+        <label for="category" class="label">Category</label>
+        <select id="category" class="input"><option value="">All my categories</option></select>
+      </div>
+      <button type="submit" class="btn-outline"><i class="fa-solid fa-rotate"></i>Refresh</button>
+    </form>
+    <p id="near-note" class="mt-2 text-xs text-slate-500"></p>
+
+    <div id="list" class="mt-5 space-y-4"></div>
+    <div id="pager"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/tech.js"></script>
+  <script src="requests.js"></script>
+</body>
+</html>
