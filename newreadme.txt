@@ -1,4 +1,4 @@
-# repairhubcohort8
+# repairhubcohort9
 
 RepairHub web frontend: plain HTML, JavaScript and Tailwind (Play CDN), talking to the
 [RepairHub API](https://github.com/Code4Frankie/RepairHub_api).
@@ -9,16 +9,15 @@ Serve the folder with any static server, for example the VS Code **Live Server**
 `index.html` → Open with Live Server). The root `index.html` sends logged-in users to their home page and
 everyone else to `auth/role.html`. Don't open the files directly from disk (`file://`).
 
-Which backend the app calls:
+The app calls the live API at `https://repairhub-api-1.onrender.com/api`, wherever it runs.
+The first request after a quiet period can take up to a minute while the free Render instance wakes up.
 
-- **Running locally** (`localhost` / `127.0.0.1`, e.g. Live Server): your local API at `http://localhost:5001/api` (the `PORT` in the backend `.env`).
-  Start the backend first, and make sure its `.env` has
-  `CLIENT_URL=http://localhost:5500,http://127.0.0.1:5500`.
-- **Hosted anywhere else:** the deployed API at `https://repairhub-api-1.onrender.com/api`.
+The API only accepts browsers from the addresses in its `CLIENT_URL` setting (on Render: the service's
+**Environment** tab). For Live Server that must include `http://localhost:5500,http://127.0.0.1:5500`, plus
+the hosted frontend's URL once it is deployed. Otherwise every request is blocked by the browser (CORS).
 
-To override, open any page once with `?api=<url>` (remembered in localStorage), for example
-`?api=https://repairhub-api-1.onrender.com/api`. Run `localStorage.removeItem('rh_api_base')` in the browser
-console to go back to the default.
+To use a local backend instead, open any page once with `?api=http://localhost:5001/api` (remembered in
+localStorage). Run `localStorage.removeItem('rh_api_base')` in the browser console to go back to the live API.
 
 ## Structure
 
