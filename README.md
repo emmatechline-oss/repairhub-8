@@ -1,4 +1,4 @@
-# repairhubcohort9
+# repairhubcohort8
 
 RepairHub web frontend: plain HTML, JavaScript and Tailwind (Play CDN), talking to the
 [RepairHub API](https://github.com/Code4Frankie/RepairHub_api).
