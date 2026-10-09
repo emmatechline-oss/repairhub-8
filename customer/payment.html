@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-5xl" hidden>
+    <a href="my-repairs.html" class="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-ink"><i class="fa-solid fa-arrow-left"></i>Back to My Repairs</a>
+    <div id="root" class="mt-4"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'repairs' });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      const jobId = RH.param('job');
+      let job, wallet, method = 'paystack';
+
+      const METHODS = {
+        paystack: ['fa-credit-card', 'Pay with card or bank', 'Secure checkout by Paystack. Funds are held in escrow until you confirm the repair.'],
+        wallet: ['fa-wallet', 'RepairHub wallet', 'Pay instantly from your wallet balance. Funds are held in escrow.'],
+        cash: ['fa-money-bill-wave', 'Pay on delivery', 'Pay the technician in cash when the repair is done.'],
+      };
+
+      function render() {
+        const r = job.repairRequestId || {};
+        const balance = wallet ? wallet.balance : 0;
+        const walletShort = balance < job.price;
+        if (walletShort && method === 'wallet') method = 'paystack';
+
+        setHTML('root', html`<div class="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <section>
+            <h1 class="text-2xl font-bold text-ink">Payment</h1>
+            <p class="mt-1 text-slate-500">Choose how you'd like to pay for this repair.</p>
+            <div class="mt-6 space-y-3">
+              ${Object.entries(METHODS).map(([key, [icon, label, hint]]) => {
+                const disabled = key === 'wallet' && walletShort;
+                return html`<label class="flex items-start gap-4 rounded-2xl border bg-white p-5 transition ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${method === key ? 'border-brand-600 ring-2 ring-brand-600/10' : 'border-slate-200 hover:border-brand-200'}">
+                  <input type="radio" name="method" value="${key}" class="mt-1 text-brand-600" ${method === key ? RH.ui.raw('checked') : ''} ${disabled ? RH.ui.raw('disabled') : ''} />
+                  <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><i class="fa-solid ${icon}"></i></span>
+                  <span class="flex-1">
+                    <span class="block font-semibold text-ink">${label}</span>
+                    <span class="mt-0.5 block text-sm text-slate-500">${hint}</span>
+                    ${key === 'wallet' ? html`<span class="mt-1 block text-xs ${walletShort ? 'text-red-600' : 'text-green-700'}">Balance: ${RH.ui.money(balance)}${walletShort ? ' · not enough for this repair' : ''}</span>${walletShort ? html`<a href="${RH.url('customer/wallet.html')}" class="mt-1 inline-block text-xs font-semibold text-brand-600 hover:underline">Top up wallet</a>` : ''}` : ''}
+                  </span>
+                </label>`;
+              })}
+            </div>
+          </section>
+
+          <aside class="card h-fit p-5">
+            <h2 class="font-semibold text-ink">Order summary</h2>
+            <div class="mt-3 flex items-center gap-3 rounded-xl bg-brand-50 p-3">${RH.ui.deviceTile(r.itemType, 'w-11 h-11 text-lg')}
+              <div><p class="text-sm font-semibold text-ink">${RH.data.requestTitle(r)}</p><p class="text-xs text-slate-500">${r.brandModel || ''}</p></div></div>
+            <div class="mt-3 divide-y divide-slate-100 text-sm">
+              <div class="flex justify-between py-2"><span class="text-slate-500">Request ID</span><span class="font-medium text-ink">${RH.ui.ref(job.repairRequestId && job.repairRequestId._id)}</span></div>
+              <div class="flex justify-between py-2"><span class="text-slate-500">Warranty</span><span class="font-medium text-ink">${job.warrantyDays ? `${job.warrantyDays} days` : 'None'}</span></div>
+            </div>
+            <div class="mt-3 flex items-end justify-between border-t border-slate-100 pt-4">
+              <span class="font-semibold text-ink">Total</span><span class="text-2xl font-bold text-brand-600">${RH.ui.money(job.price)}</span>
+            </div>
+            <button id="pay-btn" class="btn-primary mt-5 w-full">${method === 'cash' ? 'Confirm pay on delivery' : `Pay ${RH.ui.money(job.price)}`} <i class="fa-solid fa-arrow-right"></i></button>
+            <p class="mt-3 text-center text-xs text-slate-500"><i class="fa-solid fa-lock mr-1"></i>The amount is fixed to the accepted quotation.</p>
+          </aside>
+        </div>`);
+
+        document.querySelectorAll('input[name="method"]').forEach((r) => r.addEventListener('change', () => { method = r.value; render(); }));
+        document.getElementById('pay-btn').addEventListener('click', (e) => pay(e.currentTarget));
+      }
+
+      async function pay(btn) {
+        await RH.ui.withLoading(btn, async () => {
+          try {
+            const { data } = await RH.api.payments.pay(job._id, method);
+            if (method === 'paystack') {
+              try { sessionStorage.setItem('rh_pending_payment', JSON.stringify({ reference: data.reference, jobId: job._id })); } catch (e) { /* ignore */ }
+              // PAYSTACK_MOCK on the server returns a fake checkout URL; skip straight to verification.
+              if (/paystack\.test/.test(data.authorizationUrl)) RH.go('customer/payment-callback.html', { reference: data.reference });
+              else location.href = data.authorizationUrl;
+              return;
+            }
+            RH.flash(method === 'cash' ? 'Pay on delivery selected.' : 'Payment successful. Funds are held in escrow.');
+            RH.go('customer/booking-confirmed.html', { job: job._id });
+          } catch (e) {
+            RH.ui.toast(e.message, 'error');
+          }
+        }, method === 'paystack' ? 'Opening checkout…' : 'Processing…');
+      }
+
+      async function load() {
+        if (!jobId) return setHTML('root', RH.ui.errorState('No repair job was specified.'));
+        setHTML('root', RH.ui.spinner());
+        try {
+          const [j, w] = await Promise.all([RH.api.jobs.get(jobId), RH.api.wallet.me().catch(() => ({ data: null }))]);
+          job = j.data;
+          wallet = w.data;
+          if (job.payment.status !== 'unpaid') {
+            setHTML('root', RH.ui.emptyState('fa-circle-check', 'Payment already arranged', `This repair is marked as: ${RH.ui.statusLabel(job.payment.status)}.`,
+              html`<a class="btn-primary btn-sm" href="${RH.url('customer/repair-details.html', { job: job._id })}">View repair</a>`));
+            return;
+          }
+          if (['completed', 'cancelled', 'disputed'].includes(job.status)) {
+            setHTML('root', RH.ui.emptyState('fa-ban', 'Payment not available', `This repair is ${RH.ui.statusLabel(job.status).toLowerCase()}.`));
+            return;
+          }
+          render();
+        } catch (e) {
+          setHTML('root', RH.ui.errorState(e.message, true));
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

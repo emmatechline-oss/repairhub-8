@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-3xl" hidden>
+    <h1 class="text-2xl font-bold text-ink">Settings</h1>
+    <p class="mt-1 text-slate-500">Manage your account details and security.</p>
+
+    <form id="profile-form" class="card mt-6 space-y-4 p-5 sm:p-6" novalidate>
+      <h2 class="font-semibold text-ink">Profile</h2>
+      <p data-form-error class="hidden rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div><label for="fullName" class="label">Full name</label><input id="fullName" name="fullName" maxlength="100" class="input" /></div>
+        <div><label for="phone" class="label">Phone number</label><input id="phone" name="phone" type="tel" placeholder="08031234567" class="input" /></div>
+      </div>
+      <div><label for="email" class="label">Email address</label><input id="email" disabled class="input bg-slate-50 text-slate-500" /></div>
+      <button type="submit" class="btn-primary">Save profile</button>
+    </form>
+
+    <form id="address-form" class="card mt-6 space-y-4 p-5 sm:p-6" novalidate>
+      <h2 class="font-semibold text-ink">Default address</h2>
+      <p class="text-sm text-slate-500">Used to pre-fill new repair requests.</p>
+      <textarea id="address" name="address" rows="2" maxlength="300" class="input resize-none" placeholder="e.g. 15, Ponle Street, Egbeda, Lagos"></textarea>
+      <button type="submit" class="btn-primary">Save address</button>
+    </form>
+
+    <form id="password-form" class="card mt-6 space-y-4 p-5 sm:p-6" novalidate>
+      <h2 class="font-semibold text-ink">Change password</h2>
+      <p data-form-error class="hidden rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+      <div><label for="currentPassword" class="label">Current password</label><input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" class="input" /></div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div><label for="newPassword" class="label">New password</label><input id="newPassword" name="newPassword" type="password" autocomplete="new-password" class="input" /></div>
+        <div><label for="confirmPassword" class="label">Confirm new password</label><input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" class="input" /></div>
+      </div>
+      <button type="submit" class="btn-primary">Update password</button>
+    </form>
+
+    <div class="card mt-6 flex items-center justify-between gap-4 p-5 sm:p-6">
+      <div><p class="font-semibold text-ink">Log out</p><p class="text-sm text-slate-500">Sign out of RepairHub on this device.</p></div>
+      <button id="logout" class="btn-danger btn-sm">Log out</button>
+    </div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'settings', roles: ['customer', 'technician', 'admin'] });
+      if (!user) return;
+      const profileForm = document.getElementById('profile-form');
+      const addressForm = document.getElementById('address-form');
+      const passwordForm = document.getElementById('password-form');
+      let customerProfile = null;
+      if (user.role !== 'customer') addressForm.hidden = true;
+
+      profileForm.fullName.value = user.fullName || '';
+      profileForm.phone.value = user.phone || '';
+      document.getElementById('email').value = user.email || '';
+
+      // Refresh from the server in case the stored copy is stale.
+      RH.api.users.me().then(({ data }) => {
+        RH.auth.setUser(data);
+        profileForm.fullName.value = data.fullName || '';
+        profileForm.phone.value = data.phone || '';
+      }).catch(() => {});
+      if (user.role === 'customer') RH.api.customerProfile.me().then(({ data }) => {
+        customerProfile = data;
+        addressForm.address.value = data.address || '';
+      }).catch(() => {});
+
+      profileForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        RH.ui.clearErrors(profileForm);
+        const fullName = profileForm.fullName.value.trim();
+        const phone = profileForm.phone.value.replace(/[\s-]/g, '');
+        if (fullName.length < 2) return RH.ui.fieldError(profileForm, 'fullName', 'Enter your full name.');
+        if (phone && !/^(\+234|234|0)[789][01]\d{8}$/.test(phone)) return RH.ui.fieldError(profileForm, 'phone', 'Enter a valid Nigerian mobile number.');
+        await RH.ui.withLoading(profileForm.querySelector('[type="submit"]'), async () => {
+          try {
+            const { data } = await RH.api.users.update(user._id, { fullName, ...(phone ? { phone } : {}) });
+            RH.auth.setUser(data);
+            RH.ui.toast('Profile updated.', 'success');
+          } catch (err) {
+            RH.ui.showFormError(profileForm, err);
+          }
+        }, 'Saving…');
+      });
+
+      addressForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!customerProfile) return RH.ui.toast('Your profile is still loading. Try again in a moment.', 'error');
+        await RH.ui.withLoading(addressForm.querySelector('[type="submit"]'), async () => {
+          try {
+            const { data } = await RH.api.customerProfile.update(customerProfile._id, { address: addressForm.address.value.trim() });
+            customerProfile = data;
+            RH.ui.toast('Default address saved.', 'success');
+          } catch (err) {
+            RH.ui.toast(err.message, 'error');
+          }
+        }, 'Saving…');
+      });
+
+      passwordForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        RH.ui.clearErrors(passwordForm);
+        const v = Object.fromEntries(new FormData(passwordForm));
+        if (!v.currentPassword) return RH.ui.fieldError(passwordForm, 'currentPassword', 'Enter your current password.');
+        if (v.newPassword.length < 8) return RH.ui.fieldError(passwordForm, 'newPassword', 'Use at least 8 characters.');
+        if (v.newPassword !== v.confirmPassword) return RH.ui.fieldError(passwordForm, 'confirmPassword', 'Passwords do not match.');
+        await RH.ui.withLoading(passwordForm.querySelector('[type="submit"]'), async () => {
+          try {
+            await RH.api.users.changePassword({ currentPassword: v.currentPassword, newPassword: v.newPassword });
+            passwordForm.reset();
+            RH.ui.toast('Password updated.', 'success');
+          } catch (err) {
+            if (err.status === 401) RH.ui.fieldError(passwordForm, 'currentPassword', 'Current password is incorrect.');
+            else RH.ui.showFormError(passwordForm, err);
+          }
+        }, 'Updating…');
+      });
+
+      document.getElementById('logout').addEventListener('click', () => RH.auth.logout());
+    })();
+  </script>
+</body>
+</html>

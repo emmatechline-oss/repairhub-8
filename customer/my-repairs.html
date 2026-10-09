@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Repairs · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-6xl" hidden>
+    <div class="grid gap-6 lg:grid-cols-[1fr_300px]">
+      <div class="min-w-0">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 class="text-3xl font-bold text-ink">My Repairs</h1>
+            <p class="mt-1 text-slate-500">View and manage all your repair bookings in one place.</p>
+          </div>
+          <a href="request-repair.html" class="btn-primary shrink-0"><i class="fa-solid fa-plus"></i>Book a new repair</a>
+        </div>
+
+        <div class="mt-6 flex flex-col gap-3 border-b border-slate-200 md:flex-row md:items-center md:justify-between">
+          <nav id="tabs" class="no-scrollbar -mb-px flex gap-5 overflow-x-auto text-sm" role="tablist"></nav>
+          <div class="relative mb-3 md:w-64">
+            <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400"></i>
+            <input id="search" type="search" placeholder="Search your repairs…" class="input py-2 pl-9" />
+          </div>
+        </div>
+
+        <div id="list" class="mt-5 space-y-4"></div>
+      </div>
+
+      <aside class="space-y-4">
+        <div class="card-soft p-5">
+          <h2 class="text-lg font-semibold text-ink">Repair summary</h2>
+          <div id="counts" class="mt-4 rounded-xl bg-white p-2"></div>
+        </div>
+        <div class="card-soft p-5">
+          <h2 class="flex items-center gap-2 font-semibold text-ink"><i class="fa-solid fa-shield-halved text-brand-600"></i>Warranty reminders</h2>
+          <div id="warranties" class="mt-3 space-y-2"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="my-repairs.js"></script>
+</body>
+</html>
