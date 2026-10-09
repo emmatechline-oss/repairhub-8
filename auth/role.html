@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Choose your role · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body class="bg-white">
+  <div class="grid min-h-screen lg:grid-cols-2">
+    <aside id="auth-hero" class="hidden bg-gradient-to-br from-brand-50 via-white to-brand-100 lg:block"></aside>
+
+    <main class="flex flex-col px-4 py-6 sm:px-10 lg:px-16">
+      <header class="flex items-center justify-between gap-4">
+        <img src="https://res.cloudinary.com/kz6ru1lw/image/upload/v1790942424/New_Logo_mxexp4.png" alt="RepairHub" class="h-9 w-auto lg:invisible" />
+        <a href="login.html" class="btn-outline btn-sm">Log in</a>
+      </header>
+
+      <div class="mx-auto my-auto w-full max-w-xl py-10">
+        <span class="inline-block rounded-full bg-brand-100 px-4 py-1.5 text-sm font-medium text-ink">Welcome to RepairHub</span>
+        <h1 class="mt-4 text-3xl font-bold text-ink">Choose your role</h1>
+        <p class="mt-2 text-slate-500">Tell us how you want to use RepairHub so we can give you the right experience.</p>
+
+        <div class="mt-8 space-y-5">
+          <section class="flex flex-col gap-5 rounded-2xl bg-brand-50 p-6 sm:flex-row sm:items-center">
+            <!-- Image slot RH.images.roleCustomer -->
+            <div data-slot="roleCustomer" data-slot-alt="Customer using RepairHub on a phone" data-slot-class="h-32 w-32 shrink-0 object-contain sm:h-36 sm:w-36"><span class="inline-flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-white text-3xl text-brand-600 shadow-sm"><i class="fa-solid fa-user-gear"></i></span></div>
+            <div class="flex-1">
+              <h2 class="text-xl font-semibold text-ink">I need a repair</h2>
+              <p class="mt-1 text-sm text-slate-600">Find trusted technicians, get quotes, book a repair and track your service all in one place.</p>
+              <a href="register.html?role=customer" class="btn-primary mt-4 w-full sm:w-auto">Continue as Customer <i class="fa-solid fa-arrow-right"></i></a>
+            </div>
+          </section>
+
+          <section class="flex flex-col gap-5 rounded-2xl bg-amber-50 p-6 sm:flex-row sm:items-center">
+            <!-- Image slot RH.images.roleTechnician -->
+            <div data-slot="roleTechnician" data-slot-alt="Technician with a tablet and tools" data-slot-class="h-32 w-32 shrink-0 object-contain sm:h-36 sm:w-36"><span class="inline-flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-white text-3xl text-amber-500 shadow-sm"><i class="fa-solid fa-screwdriver-wrench"></i></span></div>
+            <div class="flex-1">
+              <h2 class="text-xl font-semibold text-ink">I'm a technician</h2>
+              <p class="mt-1 text-sm text-slate-600">Join as a verified technician, receive repair requests, send quotes and grow your business.</p>
+              <a href="register.html?role=technician" class="btn-outline mt-4 w-full sm:w-auto">Continue as Technician <i class="fa-solid fa-arrow-right"></i></a>
+            </div>
+          </section>
+        </div>
+        <p class="mt-6 text-center text-sm text-slate-600">Own a repair shop with several technicians?
+          <a href="register.html?role=service_center" class="font-semibold text-brand-600 hover:underline">Register your shop</a></p>
+      </div>
+    </main>
+  </div>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script>
+    // Already logged in? Skip straight to the app.
+    (function () {
+      const user = RH.auth.getToken() && RH.auth.getUser();
+      if (user && RH.auth.isSupportedRole(user.role)) return RH.go(RH.auth.homeFor(user.role));
+      RH.layout.authHero();
+      RH.ui.fillSlots();
+    })();
+  </script>
+</body>
+</html>

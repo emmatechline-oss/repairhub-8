@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log in · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body class="bg-white">
+  <div class="grid min-h-screen lg:grid-cols-2">
+    <aside id="auth-hero" class="hidden bg-gradient-to-br from-brand-50 via-white to-brand-100 lg:block"></aside>
+
+    <main class="flex flex-col px-4 py-6 sm:px-10 lg:px-16">
+      <header class="flex flex-wrap items-center justify-between gap-3">
+        <a href="role.html" class="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-ink"><i class="fa-solid fa-arrow-left"></i>Back to role selection</a>
+        <div class="flex items-center gap-3 text-sm text-slate-500">
+          <span class="hidden sm:inline">Don't have an account?</span>
+          <a href="role.html" class="btn-outline btn-sm">Create account</a>
+        </div>
+      </header>
+
+      <div class="mx-auto my-auto w-full max-w-lg py-10">
+        <h1 class="text-3xl font-bold text-ink">Welcome back</h1>
+        <p class="mt-2 text-slate-500">Log in to manage your repairs.</p>
+
+        <p id="expired-note" class="mt-6 hidden rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">Your session has expired. Please log in again.</p>
+
+        <form id="login-form" class="mt-8 space-y-4" novalidate>
+          <p data-form-error class="hidden rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+
+          <div>
+            <label for="email" class="label">Email address</label>
+            <div data-field class="relative">
+              <i class="fa-regular fa-envelope pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input id="email" name="email" type="email" autocomplete="email" required placeholder="Enter your email address" class="input pl-10" />
+            </div>
+          </div>
+
+          <div>
+            <label for="password" class="label">Password</label>
+            <div data-field class="relative">
+              <i class="fa-solid fa-lock pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password" class="input pl-10 pr-10" />
+              <button type="button" data-toggle="password" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Show password"><i class="fa-regular fa-eye-slash"></i></button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-primary w-full">Log in <i class="fa-solid fa-arrow-right"></i></button>
+        </form>
+
+        <div class="mt-6 flex items-start gap-3 rounded-xl bg-brand-50 px-4 py-3">
+          <i class="fa-solid fa-shield-halved mt-0.5 text-brand-600"></i>
+          <div>
+            <p class="text-sm font-medium text-ink">Your information is secure</p>
+            <p class="text-xs text-slate-500">Your password is encrypted and never shared with technicians.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="auth.js"></script>
+  <script>
+    (function () {
+      if (RH.param('expired')) document.getElementById('expired-note').classList.remove('hidden');
+
+      const form = document.getElementById('login-form');
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        RH.ui.clearErrors(form);
+        const email = form.email.value.trim();
+        const password = form.password.value;
+        let ok = true;
+        if (!/^\S+@\S+\.\S+$/.test(email)) {
+          RH.ui.fieldError(form, 'email', 'Enter a valid email address.');
+          ok = false;
+        }
+        if (!password) {
+          RH.ui.fieldError(form, 'password', 'Enter your password.');
+          ok = false;
+        }
+        if (!ok) return;
+
+        await RH.ui.withLoading(form.querySelector('[type="submit"]'), async () => {
+          try {
+            const { data } = await RH.api.users.login({ email, password });
+            RH.finishLogin(data);
+          } catch (err) {
+            RH.ui.showFormError(form, err.status === 401 ? new RH.ApiError('Incorrect email or password.', 401) : err);
+          }
+        }, 'Logging in…');
+      });
+    })();
+  </script>
+</body>
+</html>

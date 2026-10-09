@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create account · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body class="bg-white">
+  <div class="grid min-h-screen lg:grid-cols-2">
+    <aside id="auth-hero" class="hidden bg-gradient-to-br from-brand-50 via-white to-brand-100 lg:block"></aside>
+
+    <main class="flex flex-col px-4 py-6 sm:px-10 lg:px-16">
+      <header class="flex flex-wrap items-center justify-between gap-3">
+        <a href="role.html" class="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-ink"><i class="fa-solid fa-arrow-left"></i>Back to role selection</a>
+        <div class="flex items-center gap-3 text-sm text-slate-500">
+          <span class="hidden sm:inline">Already have an account?</span>
+          <a href="login.html" class="btn-outline btn-sm">Log in</a>
+        </div>
+      </header>
+
+      <div class="mx-auto my-auto w-full max-w-lg py-10">
+        <h1 class="text-3xl font-bold text-ink">Create your account</h1>
+        <p id="role-subtitle" class="mt-2 text-slate-500"></p>
+
+        <form id="register-form" class="mt-8 space-y-4" novalidate>
+          <p data-form-error class="hidden rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+
+          <div>
+            <label for="fullName" class="label">Full name</label>
+            <div data-field class="relative">
+              <i class="fa-regular fa-user pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input id="fullName" name="fullName" type="text" autocomplete="name" required minlength="2" maxlength="100" placeholder="Enter your full name" class="input pl-10" />
+            </div>
+          </div>
+
+          <div id="business-field" hidden>
+            <label for="businessName" class="label">Business name</label>
+            <div data-field class="relative">
+              <i class="fa-solid fa-store pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input id="businessName" name="businessName" type="text" maxlength="150" placeholder="e.g. Fixit Phones & Laptops" class="input pl-10" />
+            </div>
+          </div>
+
+          <div>
+            <label for="phone" class="label">Phone number</label>
+            <div data-field class="relative">
+              <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-500"><i class="fa-solid fa-phone mr-2 text-slate-400"></i>+234</span>
+              <input id="phone" name="phone" type="tel" autocomplete="tel-national" inputmode="numeric" placeholder="803 123 4567" class="input pl-[5.5rem]" />
+            </div>
+          </div>
+
+          <div>
+            <label for="email" class="label">Email address</label>
+            <div data-field class="relative">
+              <i class="fa-regular fa-envelope pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input id="email" name="email" type="email" autocomplete="email" required placeholder="Enter your email address" class="input pl-10" />
+            </div>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="password" class="label">Password</label>
+              <div data-field class="relative">
+                <i class="fa-solid fa-lock pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="Create a password" class="input pl-10 pr-10" />
+                <button type="button" data-toggle="password" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Show password"><i class="fa-regular fa-eye-slash"></i></button>
+              </div>
+            </div>
+            <div>
+              <label for="confirmPassword" class="label">Confirm password</label>
+              <div data-field class="relative">
+                <i class="fa-solid fa-lock pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required placeholder="Confirm your password" class="input pl-10 pr-10" />
+                <button type="button" data-toggle="confirmPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Show password"><i class="fa-regular fa-eye-slash"></i></button>
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-slate-500">At least 8 characters.</p>
+
+          <label class="flex items-start gap-2.5 text-sm text-slate-600">
+            <input name="terms" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-600" />
+            <span>I agree to the RepairHub Terms of Service and Privacy Policy</span>
+          </label>
+
+          <button type="submit" class="btn-primary w-full">Create account <i class="fa-solid fa-arrow-right"></i></button>
+        </form>
+
+        <div class="mt-6 flex items-start gap-3 rounded-xl bg-brand-50 px-4 py-3">
+          <i class="fa-solid fa-shield-halved mt-0.5 text-brand-600"></i>
+          <div>
+            <p class="text-sm font-medium text-ink">Your information is secure</p>
+            <p class="text-xs text-slate-500">Your password is encrypted and never shared with technicians.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="auth.js"></script>
+  <script src="register.js"></script>
+</body>
+</html>
