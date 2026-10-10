@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-4xl" hidden>
+    <h1 class="text-2xl font-bold text-ink sm:text-3xl">Team</h1>
+    <p class="mt-1 text-slate-500">Technicians who work at your shop. When you send a quote, you choose which of them will do the job.</p>
+
+    <form id="add-form" class="card mt-6 grid gap-3 p-5 sm:grid-cols-[1fr_auto] sm:items-end" novalidate>
+      <div>
+        <label for="email" class="label">Add a technician by email</label>
+        <input id="email" name="email" type="email" class="input" placeholder="technician@example.com" />
+        <p class="mt-1 text-xs text-slate-500">They need a RepairHub technician account first, and can only belong to one shop.</p>
+      </div>
+      <button type="submit" class="btn-primary"><i class="fa-solid fa-user-plus"></i>Add to team</button>
+    </form>
+
+    <div id="list" class="mt-6"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/tech.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'team', roles: ['service_center'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      const form = document.getElementById('add-form');
+      let shop;
+      let team = [];
+      const VERIFY = { verified: ['Verified', 'green'], pending: ['Pending verification', 'amber'], rejected: ['Verification rejected', 'red'] };
+
+      function row(t) {
+        const u = t.userId || {};
+        const [vLabel, vTone] = VERIFY[t.verificationStatus] || VERIFY.pending;
+        return html`<li class="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
+          <div class="flex min-w-0 flex-1 items-center gap-3">${RH.ui.avatar(u.fullName, 'w-11 h-11 text-sm')}
+            <div class="min-w-0"><p class="truncate font-semibold text-ink">${u.fullName || 'Technician'}</p>
+              <p class="truncate text-xs text-slate-500">${[u.email, u.phone].filter(Boolean).join(' · ')}</p></div></div>
+          <div class="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            ${RH.ui.toneBadge(vLabel, vTone)}
+            <span><i class="fa-solid fa-star text-amber-400"></i> ${t.ratingAvg ? t.ratingAvg.toFixed(1) : 'New'}</span>
+            <span>${t.jobsCompleted || 0} jobs</span>
+          </div>
+          <button data-remove="${t._id}" class="btn-ghost btn-sm text-red-600 hover:bg-red-50"><i class="fa-solid fa-user-minus"></i>Remove</button>
+        </li>`;
+      }
+
+      async function load() {
+        setHTML('list', RH.ui.spinner());
+        try {
+          shop = shop || (await RH.tech.profile());
+          team = (await RH.api.serviceCenters.team(shop._id)).data;
+          if (!team.length) {
+            setHTML('list', RH.ui.emptyState('fa-users-gear', 'No team members yet', 'Add at least one technician so you can send quotes for job requests.'));
+            return;
+          }
+          setHTML('list', html`<ul class="card divide-y divide-slate-100 px-5">${team.map(row)}</ul>`);
+          document.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
+            const t = team.find((x) => x._id === b.dataset.remove);
+            const yes = await RH.ui.confirm(`Remove ${(t.userId || {}).fullName || 'this technician'}?`, 'They will no longer be able to work on quotes for your shop. Jobs already booked are not affected.', { confirmText: 'Remove', danger: true });
+            if (!yes) return;
+            await RH.ui.withLoading(b, async () => {
+              try {
+                await RH.api.serviceCenters.removeMember(shop._id, t._id);
+                RH.ui.toast('Removed from team.', 'success');
+                load();
+              } catch (e) {
+                RH.ui.toast(e.message, 'error');
+              }
+            });
+          }));
+        } catch (e) {
+          setHTML('list', RH.ui.errorState(e.message, true));
+        }
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        RH.ui.clearErrors(form);
+        const email = form.email.value.trim();
+        if (!/^\S+@\S+\.\S+$/.test(email)) return RH.ui.fieldError(form, 'email', 'Enter a valid email address.');
+        await RH.ui.withLoading(form.querySelector('[type=submit]'), async () => {
+          try {
+            await RH.api.serviceCenters.addMember(shop._id, email);
+            form.email.value = '';
+            RH.ui.toast('Technician added. They have been notified.', 'success');
+            load();
+          } catch (err) {
+            RH.ui.fieldError(form, 'email', err.message);
+          }
+        }, 'Adding…');
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>
