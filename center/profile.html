@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shop profile · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-3xl" hidden>
+    <h1 class="text-2xl font-bold text-ink sm:text-3xl">Shop profile</h1>
+    <p class="mt-1 text-slate-500">Customers see your shop name on quotes. Your categories decide which job requests you receive.</p>
+    <div id="root" class="mt-6"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script src="../assets/js/tech.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'profile', roles: ['service_center'] });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      let shop;
+      let loc = null;
+
+      const locationText = () => (loc
+        ? html`<span class="text-green-700"><i class="fa-solid fa-location-dot mr-1"></i>Set (${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)})</span>`
+        : html`<span class="text-amber-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Not set. "Near my base location" on Job requests won't work until you set it.</span>`);
+
+      function render(groups) {
+        const mine = new Set((shop.serviceCategoryIds || []).map(String));
+        setHTML('root', html`<form id="shop-form" class="space-y-6" novalidate>
+          <p data-form-error class="hidden rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"></p>
+          <section class="card space-y-4 p-5 sm:p-6">
+            <h2 class="font-semibold text-ink">Business details</h2>
+            <div><label for="businessName" class="label">Business name</label><input id="businessName" name="businessName" maxlength="150" class="input" value="${shop.businessName || ''}" /></div>
+            <div><label for="description" class="label">About the shop</label>
+              <textarea id="description" name="description" rows="3" maxlength="1000" class="input resize-y" placeholder="What you repair, years in business, guarantees">${shop.description || ''}</textarea></div>
+            <div class="grid gap-4 sm:grid-cols-[1fr_180px]">
+              <div><label for="address" class="label">Shop address</label><input id="address" name="address" maxlength="300" class="input" value="${shop.address || ''}" placeholder="e.g. 12 Allen Avenue, Ikeja, Lagos" /></div>
+              <div><label for="coverageRadiusKm" class="label">Coverage radius (km)</label><input id="coverageRadiusKm" name="coverageRadiusKm" type="number" min="1" max="200" class="input" value="${shop.coverageRadiusKm || 15}" /></div>
+            </div>
+          </section>
+
+          <section class="card p-5 sm:p-6">
+            <h2 class="font-semibold text-ink">Service categories</h2>
+            <p class="mt-1 text-sm text-slate-500">Ticking a category also ticks its issue types, because requests are filed under a specific issue type. Leave everything unticked to see all requests.</p>
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+              ${groups.map((g) => html`<fieldset class="rounded-xl border border-slate-200 p-4">
+                <label class="flex items-center gap-2 font-medium text-ink"><input type="checkbox" data-parent="${g._id}" value="${g._id}" class="h-4 w-4 rounded border-slate-300 text-brand-600" ${mine.has(String(g._id)) ? RH.ui.raw('checked') : ''} />${g.name}</label>
+                ${g.children.length ? html`<div class="mt-2 space-y-1.5 pl-6">${g.children.map((c) => html`<label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" data-child-of="${g._id}" value="${c._id}" class="h-4 w-4 rounded border-slate-300 text-brand-600" ${mine.has(String(c._id)) ? RH.ui.raw('checked') : ''} />${c.name}</label>`)}</div>` : ''}
+              </fieldset>`)}
+            </div>
+          </section>
+
+          <section class="card p-5 sm:p-6">
+            <h2 class="font-semibold text-ink">Shop location</h2>
+            <p class="mt-1 text-sm text-slate-500">Used to find job requests near your shop. Open this page at the shop and use your current location.</p>
+            <p id="loc-status" class="mt-3 text-sm">${locationText()}</p>
+            <button type="button" id="use-location" class="btn-outline btn-sm mt-3"><i class="fa-solid fa-location-crosshairs"></i>Use my current location</button>
+          </section>
+
+          <div class="flex justify-end"><button type="submit" class="btn-primary">Save profile</button></div>
+        </form>`);
+
+        const form = document.getElementById('shop-form');
+        form.querySelectorAll('[data-parent]').forEach((p) => p.addEventListener('change', () => {
+          form.querySelectorAll(`[data-child-of="${p.value}"]`).forEach((c) => (c.checked = p.checked));
+        }));
+        document.getElementById('use-location').addEventListener('click', async (e) => {
+          await RH.ui.withLoading(e.currentTarget, async () => {
+            try {
+              loc = await RH.tech.currentLocation();
+              setHTML('loc-status', html`${locationText()} <span class="text-slate-500">· click Save profile to keep it</span>`);
+            } catch (err) {
+              RH.ui.toast(err.message, 'error');
+            }
+          }, 'Locating…');
+        });
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          RH.ui.clearErrors(form);
+          const name = form.businessName.value.trim();
+          if (!name) return RH.ui.fieldError(form, 'businessName', 'Enter your business name.');
+          const radius = Number(form.coverageRadiusKm.value);
+          if (!radius || radius < 1 || radius > 200) return RH.ui.fieldError(form, 'coverageRadiusKm', 'Between 1 and 200 km.');
+          const ids = [...form.querySelectorAll('[data-parent]:checked, [data-child-of]:checked')].map((i) => i.value);
+          if (ids.length > 30) return RH.ui.toast('Choose at most 30 categories.', 'error');
+          const body = { businessName: name, coverageRadiusKm: radius, serviceCategoryIds: ids };
+          // The API rejects empty strings, so only send filled-in text fields.
+          if (form.description.value.trim()) body.description = form.description.value.trim();
+          if (form.address.value.trim()) body.address = form.address.value.trim();
+          if (loc) body.location = loc;
+          await RH.ui.withLoading(form.querySelector('[type=submit]'), async () => {
+            try {
+              shop = (await RH.api.serviceCenters.update(shop._id, body)).data;
+              RH.ui.toast('Profile saved.', 'success');
+            } catch (err) {
+              RH.ui.showFormError(form, err);
+            }
+          }, 'Saving…');
+        });
+      }
+
+      Promise.all([RH.tech.profile(), RH.data.categoryTree()])
+        .then(([s, groups]) => {
+          shop = s;
+          loc = RH.tech.point(s.location);
+          render(groups);
+        })
+        .catch((e) => setHTML('root', RH.ui.errorState(e.message, true)));
+    })();
+  </script>
+</body>
+</html>
