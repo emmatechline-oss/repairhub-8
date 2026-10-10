@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rate &amp; review · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-6xl" hidden>
+    <a id="back" href="my-repairs.html" class="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-ink"><i class="fa-solid fa-arrow-left"></i>Back</a>
+    <div id="root" class="mt-4"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'repairs' });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      const jobId = RH.param('job');
+      document.getElementById('back').href = RH.url('customer/repair-details.html', { job: jobId });
+
+      const TAGS = ['Professional', 'On time', 'Good communication', 'Quality work', 'Fair pricing', 'Would recommend'];
+      const LABELS = ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'];
+      let rating = 0;
+      const tags = new Set();
+
+      function renderStars() {
+        setHTML('stars', [1, 2, 3, 4, 5].map((i) => html`<button type="button" data-star="${i}" class="text-4xl transition hover:scale-110 ${i <= rating ? 'text-amber-400' : 'text-slate-200'}" aria-label="${i} star${i > 1 ? 's' : ''}" aria-pressed="${i <= rating}"><i class="fa-solid fa-star"></i></button>`));
+        const label = document.getElementById('rating-label');
+        label.classList.toggle('hidden', !rating);
+        setHTML(label, html`<span class="block font-semibold">${LABELS[rating]}</span><span class="block text-xs">${rating} out of 5</span>`);
+        document.querySelectorAll('[data-star]').forEach((b) => b.addEventListener('click', () => { rating = Number(b.dataset.star); renderStars(); }));
+      }
+
+      function renderTags() {
+        setHTML('tags', TAGS.map((t) => html`<button type="button" data-tag="${t}" aria-pressed="${tags.has(t)}" class="chip ${tags.has(t) ? 'chip-active' : ''}">${tags.has(t) ? html`<i class="fa-solid fa-check text-xs"></i>` : ''}${t}</button>`));
+        document.querySelectorAll('[data-tag]').forEach((b) => b.addEventListener('click', () => {
+          tags.has(b.dataset.tag) ? tags.delete(b.dataset.tag) : tags.add(b.dataset.tag);
+          renderTags();
+        }));
+      }
+
+      function render(job, appt, tech) {
+        const r = job.repairRequestId || {};
+        const name = RH.data.techName(tech);
+        const mode = appt && RH.data.SERVICE_MODES[appt.serviceMode];
+        const kv = (icon, k, v) => html`<div class="flex items-start justify-between gap-4 py-2.5 text-sm"><span class="flex items-center gap-2 text-slate-500"><i class="fa-solid ${icon} w-4 text-slate-400"></i>${k}</span><span class="text-right font-medium text-ink">${v || '—'}</span></div>`;
+
+        setHTML('root', html`<div class="grid gap-6 lg:grid-cols-[1fr_320px]">
+          <div class="min-w-0">
+            <h1 class="text-2xl font-bold text-ink">Rate &amp; Review</h1>
+            <p class="mt-1 text-slate-500">Share your experience to help other RepairHub users.</p>
+
+            <form id="review-form" class="card mt-6 space-y-6 p-5 sm:p-6" novalidate>
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+                ${RH.ui.deviceTile(r.itemType, 'w-20 h-20 text-3xl')}
+                <div class="flex-1"><p class="text-lg font-semibold text-ink">${RH.data.requestTitle(r)}</p><p class="text-sm text-slate-500">${r.brandModel || ''}</p></div>
+                <div class="rounded-xl border border-slate-100 px-4 py-2 text-sm"><p class="text-xs text-slate-500">Completed</p><p class="font-medium text-ink">${RH.ui.dateTime(job.completedAt)}</p></div>
+              </div>
+
+              <div class="flex items-center gap-3 border-t border-slate-100 pt-5">
+                ${RH.ui.avatar(name, 'w-14 h-14 text-lg')}
+                <div><p class="font-semibold text-ink">${name} <i class="fa-solid fa-circle-check text-sm text-brand-600"></i></p>
+                  <p class="text-sm text-slate-500">Technician</p>
+                  ${tech ? html`<p class="text-xs text-slate-500"><i class="fa-solid fa-star text-amber-400"></i> <b class="text-ink">${tech.ratingAvg ? tech.ratingAvg.toFixed(1) : 'New'}</b> (${tech.jobsCompleted || 0} jobs completed)</p>` : ''}</div>
+              </div>
+
+              <div>
+                <p class="font-semibold text-ink">How would you rate ${name.split(' ')[0]}'s service?</p>
+                <p class="text-sm text-slate-500">Tap a star to rate your experience</p>
+                <div class="mt-3 flex flex-wrap items-center gap-4">
+                  <div id="stars" class="flex gap-2"></div>
+                  <p id="rating-label" class="hidden rounded-lg bg-green-50 px-4 py-1.5 text-center text-sm text-green-700"></p>
+                </div>
+              </div>
+
+              <div>
+                <p class="font-semibold text-ink">What did you like about the service? <span class="font-normal text-slate-400">Optional</span></p>
+                <p class="text-sm text-slate-500">Select all that apply</p>
+                <div id="tags" class="mt-3 flex flex-wrap gap-2"></div>
+              </div>
+
+              <div>
+                <label for="comment" class="font-semibold text-ink">Tell us more <span class="font-normal text-slate-400">Optional</span></label>
+                <textarea id="comment" name="comment" rows="4" maxlength="1000" placeholder="Share details about your experience" class="input mt-2 resize-y"></textarea>
+              </div>
+
+              <button type="submit" class="btn-primary w-full">Submit review <i class="fa-solid fa-arrow-right"></i></button>
+            </form>
+          </div>
+
+          <aside class="space-y-4">
+            <div class="card p-5">
+              <h2 class="font-semibold text-ink">Repair summary</h2>
+              <div class="mt-3 flex items-center gap-3 rounded-xl bg-brand-50 p-3">${RH.ui.deviceTile(r.itemType, 'w-11 h-11 text-lg')}
+                <div><p class="text-sm font-semibold text-ink">${RH.data.requestTitle(r)}</p><p class="text-xs text-slate-500">${r.brandModel || ''}</p></div></div>
+              <div class="mt-2 divide-y divide-slate-100">
+                ${kv('fa-calendar', 'Appointment date', appt && RH.ui.date(appt.scheduledAt))}
+                ${kv('fa-clock', 'Appointment time', appt && RH.ui.time(appt.scheduledAt))}
+                ${kv('fa-house', 'Service mode', mode && mode.label)}
+                ${kv('fa-location-dot', 'Address', (appt && appt.address) || r.address)}
+                ${kv('fa-hashtag', 'Request ID', RH.ui.ref(r._id))}
+                ${kv('fa-circle-check', 'Status', RH.ui.statusLabel(job.status))}
+              </div>
+              <div class="mt-2 flex items-end justify-between border-t border-slate-100 pt-4">
+                <span class="font-semibold text-ink">Total</span><span class="text-2xl font-bold text-brand-600">${RH.ui.money(job.price)}</span>
+              </div>
+              <p class="mt-1 flex justify-between text-sm"><span class="text-slate-500">Payment method</span><span class="font-medium text-ink">${RH.data.PAYMENT_METHODS[job.payment.method] || '—'}</span></p>
+            </div>
+            <div class="card-soft flex gap-3 p-5">
+              <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600"><i class="fa-regular fa-lightbulb"></i></span>
+              <div><p class="text-sm font-semibold text-ink">Your review helps others</p>
+                <p class="mt-1 text-xs text-slate-600">Your feedback helps other RepairHub customers make informed decisions and recognises great technicians.</p></div>
+            </div>
+          </aside>
+        </div>`);
+
+        renderStars();
+        renderTags();
+        const form = document.getElementById('review-form');
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          if (!rating) return RH.ui.toast('Please choose a star rating.', 'error');
+          await RH.ui.withLoading(form.querySelector('[type="submit"]'), async () => {
+            try {
+              const comment = form.comment.value.trim();
+              await RH.api.reviews.create({ repairJobId: job._id, rating, tags: [...tags], ...(comment ? { comment } : {}) });
+              RH.flash('Thanks for your review!');
+              RH.go('customer/repair-details.html', { job: job._id });
+            } catch (err) {
+              RH.ui.toast(err.message, 'error');
+            }
+          }, 'Submitting…');
+        });
+      }
+
+      async function load() {
+        if (!jobId) return setHTML('root', RH.ui.errorState('No repair was specified.'));
+        setHTML('root', RH.ui.spinner());
+        try {
+          const { data: job } = await RH.api.jobs.get(jobId);
+          if (job.status !== 'completed') {
+            return setHTML('root', RH.ui.emptyState('fa-hourglass-half', 'Not ready for review', 'You can review this repair once the technician marks it as completed.',
+              html`<a class="btn-primary btn-sm" href="${RH.url('customer/repair-details.html', { job: job._id })}">Track repair</a>`));
+          }
+          const [appt, tech, existing] = await Promise.all([
+            RH.api.appointments.get(job.appointmentId).then((r) => r.data).catch(() => null),
+            RH.data.technician(job.technicianId),
+            RH.api.reviews.forTechnician(job.technicianId, { limit: 100 }).then((r) => r.data.find((x) => String(x.repairJobId) === String(job._id))).catch(() => null),
+          ]);
+          if (existing) {
+            return setHTML('root', RH.ui.emptyState('fa-star', 'Already reviewed', 'You have already reviewed this repair. Reviews cannot be changed once submitted.',
+              html`<a class="btn-primary btn-sm" href="${RH.url('customer/repair-details.html', { job: job._id })}">View repair</a>`));
+          }
+          render(job, appt, tech);
+        } catch (e) {
+          setHTML('root', RH.ui.errorState(e.message, true));
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

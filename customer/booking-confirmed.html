@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking confirmed · RepairHub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="../assets/js/tailwind-config.js"></script>
+  <link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body>
+  <main id="page-content" class="mx-auto max-w-3xl" hidden>
+    <div id="root"></div>
+  </main>
+
+  <script src="../assets/js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/motion@12.43.0/dist/motion.js"></script>
+  <script src="../assets/js/motion-fx.js"></script>
+  <script src="../assets/js/ui.js"></script>
+  <script src="../assets/js/auth.js"></script>
+  <script src="../assets/js/api.js"></script>
+  <script src="../assets/js/layout.js"></script>
+  <script src="../assets/js/data.js"></script>
+  <script>
+    (function () {
+      const user = RH.layout.app({ active: 'repairs' });
+      if (!user) return;
+      const { html, setHTML } = RH.ui;
+      const jobId = RH.param('job');
+
+      async function load() {
+        if (!jobId) return setHTML('root', RH.ui.errorState('No booking was specified.'));
+        setHTML('root', RH.ui.spinner());
+        try {
+          const { data: job } = await RH.api.jobs.get(jobId);
+          const [appt, tech] = await Promise.all([
+            RH.api.appointments.get(job.appointmentId).then((r) => r.data).catch(() => null),
+            RH.data.technician(job.technicianId),
+          ]);
+          const r = job.repairRequestId || {};
+          const mode = appt && RH.data.SERVICE_MODES[appt.serviceMode];
+          const kv = (icon, k, v) => html`<div class="flex items-start justify-between gap-4 py-3 text-sm"><span class="flex items-center gap-2 text-slate-500"><i class="fa-solid ${icon} w-4 text-slate-400"></i>${k}</span><span class="text-right font-medium text-ink">${v || '—'}</span></div>`;
+
+          setHTML('root', html`<section class="text-center">
+            <div data-celebrate class="mx-auto w-fit">${RH.ui.slotImage(RH.images.requestSuccess, "Booking confirmed", "mx-auto mt-4 h-32 w-auto", html`<span class="mx-auto mt-4 inline-flex h-24 w-24 items-center justify-center rounded-full bg-green-100 text-5xl text-green-600"><i class="fa-solid fa-check"></i></span>`)}</div>
+            <h1 class="mt-6 text-2xl font-bold text-ink sm:text-3xl">Booking confirmed!</h1>
+            <p class="mx-auto mt-2 max-w-lg text-slate-600">${RH.data.techName(tech)} has been notified and will see you at the scheduled time.</p>
+          </section>
+          <section class="card mt-8 p-5 sm:p-6">
+            <div class="flex items-center gap-4 rounded-xl bg-brand-50 p-4">${RH.ui.deviceTile(r.itemType)}
+              <div class="min-w-0 flex-1"><p class="font-semibold text-ink">${RH.data.requestTitle(r)}</p><p class="text-xs text-slate-500">${r.brandModel || ''}</p></div>
+              ${RH.ui.badge(job.payment.status)}
+            </div>
+            <div class="mt-2 divide-y divide-slate-100">
+              ${kv('fa-user', 'Technician', RH.data.techName(tech))}
+              ${kv('fa-calendar', 'Appointment date', appt && RH.ui.date(appt.scheduledAt))}
+              ${kv('fa-clock', 'Appointment time', appt && RH.ui.time(appt.scheduledAt))}
+              ${kv('fa-house', 'Service mode', mode && mode.label)}
+              ${kv('fa-location-dot', 'Address', appt && appt.address)}
+              ${kv('fa-hashtag', 'Request ID', RH.ui.ref(r._id))}
+              ${kv('fa-credit-card', 'Payment', RH.ui.statusLabel(job.payment.status))}
+            </div>
+            <div class="mt-2 flex items-end justify-between border-t border-slate-100 pt-4">
+              <span class="font-semibold text-ink">Total</span><span class="text-2xl font-bold text-brand-600">${RH.ui.money(job.price)}</span>
+            </div>
+          </section>
+          <div class="mx-auto mt-8 flex max-w-sm flex-col gap-3">
+            ${job.payment.status === 'unpaid'
+              ? html`<a href="${RH.url('customer/payment.html', { job: job._id })}" class="btn-primary">Complete payment <i class="fa-solid fa-arrow-right"></i></a>`
+              : ''}
+            <a href="${RH.url('customer/repair-details.html', { job: job._id })}" class="${job.payment.status === 'unpaid' ? 'btn-outline' : 'btn-primary'}">Track repair <i class="fa-solid fa-arrow-right"></i></a>
+            <a href="${RH.url('customer/my-repairs.html')}" class="btn-outline">Go to My Repairs</a>
+          </div>`);
+        } catch (e) {
+          setHTML('root', RH.ui.errorState(e.message, true));
+        }
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>
